@@ -12,7 +12,9 @@ interface Props {
   albumPhotoCount: (albumId: string) => number;
   tagCounts: Array<{ tag: string; count: number }>;
   username: string;
+  isAdmin: boolean;
   onLogout: () => void;
+  onManageUsers: () => void;
 }
 
 export function Sidebar({
@@ -26,7 +28,9 @@ export function Sidebar({
   albumPhotoCount,
   tagCounts,
   username,
+  isAdmin,
   onLogout,
+  onManageUsers,
 }: Props) {
   const activeKey = viewKey(currentView);
 
@@ -107,6 +111,14 @@ export function Sidebar({
               </button>
             ))}
           </div>
+        </div>
+      )}
+
+      {isAdmin && (
+        <div className="nav-section">
+          <button className="nav-item" onClick={onManageUsers}>
+            <span>👤 Usuários</span>
+          </button>
         </div>
       )}
 

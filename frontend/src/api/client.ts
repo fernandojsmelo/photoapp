@@ -40,6 +40,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 export interface AuthUser {
   id: string;
   username: string;
+  isAdmin: boolean;
+  createdAt: string;
 }
 
 export function getAuthStatus() {
@@ -177,4 +179,21 @@ export function createAlbumApi(name: string) {
 
 export function deleteAlbumApi(id: string) {
   return request<void>(`/api/albums/${id}`, { method: "DELETE" });
+}
+
+// --- Users (gerenciamento, só admin) ---
+
+export function listUsersApi() {
+  return request<{ users: AuthUser[] }>("/api/users");
+}
+
+export function createUserApi(username: string, password: string) {
+  return request<{ user: AuthUser }>("/api/users", {
+    method: "POST",
+    body: JSON.stringify({ username, password }),
+  });
+}
+
+export function deleteUserApi(id: string) {
+  return request<void>(`/api/users/${id}`, { method: "DELETE" });
 }

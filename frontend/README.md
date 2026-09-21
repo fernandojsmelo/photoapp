@@ -20,15 +20,18 @@ npm run dev
 ```
 
 Abra o endereço mostrado no terminal (por padrão `http://localhost:5173`). Na
-primeira vez, você vai ver uma tela para criar o único usuário deste servidor
-self-hosted.
+primeira vez, você vai ver uma tela para criar o primeiro usuário deste servidor
+self-hosted — essa conta vira administradora e pode cadastrar outras pessoas
+depois, pela tela "Usuários" na barra lateral.
 
 Se o backend não estiver em `http://localhost:4000`, configure `VITE_API_URL` em
 um arquivo `.env` (veja `.env.example`).
 
 ## O que já dá para testar
 
-- Criar conta / entrar (autenticação simples, usuário único do servidor)
+- Criar a primeira conta (admin) / entrar; o admin cadastra outras contas pela
+  tela "Usuários" — não há auto-registro público na tela de login. Cada conta
+  só vê suas próprias fotos e álbuns.
 - Importar fotos (botão "Importar fotos" ou arrastar e soltar na tela) — o backend
   calcula hash, lê EXIF e gera thumbnail
 - Detecção de duplicatas (mesma foto importada duas vezes é ignorada)

@@ -7,6 +7,7 @@ import { PhotoEditor } from "./components/PhotoEditor";
 import { AlbumModal } from "./components/AlbumModal";
 import { BulkActionBar } from "./components/BulkActionBar";
 import { AuthScreen } from "./components/AuthScreen";
+import { UsersModal } from "./components/UsersModal";
 import { getAuthStatus, getMe, logout, searchPhotosSemantic, type AuthUser } from "./api/client";
 import { usePhotoStore } from "./store/usePhotoStore";
 import type { LibraryView } from "./types/view";
@@ -110,6 +111,7 @@ function PhotoLibrary({ user, onLogout }: { user: AuthUser; onLogout: () => void
   const [selectedPhotoId, setSelectedPhotoId] = useState<string | null>(null);
   const [editingPhotoId, setEditingPhotoId] = useState<string | null>(null);
   const [showAlbumModal, setShowAlbumModal] = useState(false);
+  const [showUsersModal, setShowUsersModal] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [selectionMode, setSelectionMode] = useState(false);
@@ -246,7 +248,9 @@ function PhotoLibrary({ user, onLogout }: { user: AuthUser; onLogout: () => void
         albumPhotoCount={(albumId) => photos.filter((p) => p.albumIds.includes(albumId)).length}
         tagCounts={tagCounts}
         username={user.username}
+        isAdmin={user.isAdmin}
         onLogout={handleLogout}
+        onManageUsers={() => setShowUsersModal(true)}
       />
 
       <main className="main-column">
@@ -358,6 +362,10 @@ function PhotoLibrary({ user, onLogout }: { user: AuthUser; onLogout: () => void
             setShowAlbumModal(false);
           }}
         />
+      )}
+
+      {showUsersModal && (
+        <UsersModal currentUserId={user.id} onClose={() => setShowUsersModal(false)} />
       )}
     </div>
   );
