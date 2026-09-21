@@ -1,0 +1,5 @@
+# Artefatos de testes locais com Playwright/MCP
+.playwright-mcp/
+
+# Sistema operacional
+.DS_Store
