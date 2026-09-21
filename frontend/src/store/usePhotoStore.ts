@@ -1,17 +1,16 @@
 import { create } from "zustand";
-import { v4 as uuid } from "uuid";
 import {
-  deleteAlbum as dbDeleteAlbum,
-  deletePhoto as dbDeletePhoto,
-  findPhotoByHash,
-  getAllAlbums,
-  getAllPhotos,
-  putAlbum,
-  putPhoto,
-} from "../db/db";
-import { readExif, getImageDimensions } from "../utils/exif";
-import { hashFile } from "../utils/hash";
-import { DEFAULT_EDITS, type AlbumRecord, type PhotoEdits, type PhotoRecord } from "../types/photo";
+  bulkPhotoAction,
+  createAlbumApi,
+  deleteAlbumApi,
+  deletePhotoApi,
+  listAlbums,
+  listPhotos,
+  patchPhoto,
+  togglePhotoAlbumApi,
+  uploadPhotos,
+} from "../api/client";
+import type { AlbumRecord, PhotoEdits, PhotoRecord } from "../types/photo";
 
 interface ImportResult {
   imported: number;
@@ -24,6 +23,7 @@ interface PhotoStoreState {
   loading: boolean;
   initialized: boolean;
   init: () => Promise<void>;
+  reset: () => void;
   importFiles: (files: FileList | File[]) => Promise<ImportResult>;
   toggleFavorite: (photoId: string) => Promise<void>;
   setTags: (photoId: string, tags: string[]) => Promise<void>;
@@ -34,7 +34,7 @@ interface PhotoStoreState {
   togglePhotoInAlbum: (photoId: string, albumId: string) => Promise<void>;
   addPhotosToAlbum: (photoIds: string[], albumId: string) => Promise<void>;
   addTagToPhotos: (photoIds: string[], tag: string) => Promise<void>;
-  setFavoriteMany: (photoIds: string[], value: boolean) => Promise<void>;
+  setFavoriteMany: (photoIds: string[]) => Promise<void>;
   removePhotosMany: (photoIds: string[]) => Promise<void>;
 }
 
@@ -47,90 +47,52 @@ export const usePhotoStore = create<PhotoStoreState>((set, get) => ({
   async init() {
     if (get().initialized) return;
     set({ loading: true });
-    const [photos, albums] = await Promise.all([getAllPhotos(), getAllAlbums()]);
+    const [{ photos }, { albums }] = await Promise.all([listPhotos(), listAlbums()]);
     set({ photos, albums, loading: false, initialized: true });
+  },
+
+  reset() {
+    set({ photos: [], albums: [], loading: false, initialized: false });
   },
 
   async importFiles(files) {
     const list = Array.from(files).filter((f) => f.type.startsWith("image/"));
-    let imported = 0;
-    let duplicates = 0;
-
-    for (const file of list) {
-      const hash = await hashFile(file);
-      const existing = await findPhotoByHash(hash);
-      if (existing) {
-        duplicates++;
-        continue;
-      }
-
-      const [exif, dims] = await Promise.all([readExif(file), getImageDimensions(file)]);
-      const record: PhotoRecord = {
-        id: uuid(),
-        fileName: file.name,
-        mimeType: file.type,
-        importedAt: new Date().toISOString(),
-        hash,
-        width: dims.width,
-        height: dims.height,
-        favorite: false,
-        tags: [],
-        albumIds: [],
-        edits: { ...DEFAULT_EDITS },
-        exif,
-        original: file,
-      };
-      await putPhoto(record);
-      imported++;
-      set((state) => ({ photos: [record, ...state.photos] }));
-    }
-
-    return { imported, duplicates };
+    if (list.length === 0) return { imported: 0, duplicates: 0 };
+    const result = await uploadPhotos(list);
+    set((state) => ({ photos: [...result.photos, ...state.photos] }));
+    return { imported: result.imported, duplicates: result.duplicates };
   },
 
   async toggleFavorite(photoId) {
     const photo = get().photos.find((p) => p.id === photoId);
     if (!photo) return;
-    const updated = { ...photo, favorite: !photo.favorite };
-    await putPhoto(updated);
+    const { photo: updated } = await patchPhoto(photoId, { favorite: !photo.favorite });
     set((state) => ({ photos: state.photos.map((p) => (p.id === photoId ? updated : p)) }));
   },
 
   async setTags(photoId, tags) {
-    const photo = get().photos.find((p) => p.id === photoId);
-    if (!photo) return;
-    const updated = { ...photo, tags };
-    await putPhoto(updated);
+    const { photo: updated } = await patchPhoto(photoId, { tags });
     set((state) => ({ photos: state.photos.map((p) => (p.id === photoId ? updated : p)) }));
   },
 
   async updateEdits(photoId, edits) {
-    const photo = get().photos.find((p) => p.id === photoId);
-    if (!photo) return;
-    const updated = { ...photo, edits };
-    await putPhoto(updated);
+    const { photo: updated } = await patchPhoto(photoId, { edits });
     set((state) => ({ photos: state.photos.map((p) => (p.id === photoId ? updated : p)) }));
   },
 
   async removePhoto(photoId) {
-    await dbDeletePhoto(photoId);
+    await deletePhotoApi(photoId);
     set((state) => ({ photos: state.photos.filter((p) => p.id !== photoId) }));
   },
 
   async createAlbum(name) {
-    const album: AlbumRecord = { id: uuid(), name, createdAt: new Date().toISOString() };
-    await putAlbum(album);
+    const { album } = await createAlbumApi(name);
     set((state) => ({ albums: [...state.albums, album] }));
     return album;
   },
 
   async removeAlbum(albumId) {
-    await dbDeleteAlbum(albumId);
-    const affected = get().photos.filter((p) => p.albumIds.includes(albumId));
-    for (const photo of affected) {
-      const updated = { ...photo, albumIds: photo.albumIds.filter((id) => id !== albumId) };
-      await putPhoto(updated);
-    }
+    await deleteAlbumApi(albumId);
     set((state) => ({
       albums: state.albums.filter((a) => a.id !== albumId),
       photos: state.photos.map((p) =>
@@ -142,46 +104,27 @@ export const usePhotoStore = create<PhotoStoreState>((set, get) => ({
   },
 
   async togglePhotoInAlbum(photoId, albumId) {
-    const photo = get().photos.find((p) => p.id === photoId);
-    if (!photo) return;
-    const has = photo.albumIds.includes(albumId);
-    const updated = {
-      ...photo,
-      albumIds: has ? photo.albumIds.filter((id) => id !== albumId) : [...photo.albumIds, albumId],
-    };
-    await putPhoto(updated);
+    const { photo: updated } = await togglePhotoAlbumApi(photoId, albumId);
     set((state) => ({ photos: state.photos.map((p) => (p.id === photoId ? updated : p)) }));
   },
 
   async addPhotosToAlbum(photoIds, albumId) {
-    const ids = new Set(photoIds);
-    const targets = get().photos.filter((p) => ids.has(p.id) && !p.albumIds.includes(albumId));
-    const updates = new Map(
-      targets.map((photo) => [photo.id, { ...photo, albumIds: [...photo.albumIds, albumId] }]),
-    );
-    await Promise.all([...updates.values()].map(putPhoto));
-    set((state) => ({ photos: state.photos.map((p) => updates.get(p.id) ?? p) }));
+    const { photos } = await bulkPhotoAction(photoIds, { action: "addToAlbum", albumId });
+    set({ photos });
   },
 
   async addTagToPhotos(photoIds, tag) {
-    const ids = new Set(photoIds);
-    const targets = get().photos.filter((p) => ids.has(p.id) && !p.tags.includes(tag));
-    const updates = new Map(targets.map((photo) => [photo.id, { ...photo, tags: [...photo.tags, tag] }]));
-    await Promise.all([...updates.values()].map(putPhoto));
-    set((state) => ({ photos: state.photos.map((p) => updates.get(p.id) ?? p) }));
+    const { photos } = await bulkPhotoAction(photoIds, { action: "addTag", tag });
+    set({ photos });
   },
 
-  async setFavoriteMany(photoIds, value) {
-    const ids = new Set(photoIds);
-    const targets = get().photos.filter((p) => ids.has(p.id) && p.favorite !== value);
-    const updates = new Map(targets.map((photo) => [photo.id, { ...photo, favorite: value }]));
-    await Promise.all([...updates.values()].map(putPhoto));
-    set((state) => ({ photos: state.photos.map((p) => updates.get(p.id) ?? p) }));
+  async setFavoriteMany(photoIds) {
+    const { photos } = await bulkPhotoAction(photoIds, { action: "favorite" });
+    set({ photos });
   },
 
   async removePhotosMany(photoIds) {
-    const ids = new Set(photoIds);
-    await Promise.all(photoIds.map(dbDeletePhoto));
-    set((state) => ({ photos: state.photos.filter((p) => !ids.has(p.id)) }));
+    const { photos } = await bulkPhotoAction(photoIds, { action: "delete" });
+    set({ photos });
   },
 }));

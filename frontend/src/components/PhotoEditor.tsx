@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { usePhotoBlob } from "../hooks/usePhotoBlob";
 import { useDisplayUrl } from "../hooks/useDisplayUrl";
 import { CropOverlay } from "./CropOverlay";
 import {
@@ -26,7 +27,8 @@ export function PhotoEditor({ photo, onSave, onClose }: Props) {
   const [workingCrop, setWorkingCrop] = useState<CropRect>(photo.edits.crop ?? FULL_CROP);
   const [rotatedUrl, setRotatedUrl] = useState<string | undefined>(undefined);
 
-  const url = useDisplayUrl(photo.original, edits.crop, edits.rotation);
+  const blob = usePhotoBlob(photo.id);
+  const url = useDisplayUrl(blob, edits.crop, edits.rotation);
   const previewFilter = useMemo(() => buildCssFilter(edits), [edits]);
   const rotatedDims =
     edits.rotation % 180 !== 0
@@ -34,28 +36,29 @@ export function PhotoEditor({ photo, onSave, onClose }: Props) {
       : { width: photo.width, height: photo.height };
 
   useEffect(() => {
-    if (!cropMode) return;
+    if (!cropMode || !blob) return;
     let cancelled = false;
     let objectUrl: string | undefined;
-    rotateOnlyBlob(photo.original, edits.rotation).then((blob) => {
+    rotateOnlyBlob(blob, edits.rotation).then((rotated) => {
       if (cancelled) return;
-      objectUrl = URL.createObjectURL(blob);
+      objectUrl = URL.createObjectURL(rotated);
       setRotatedUrl(objectUrl);
     });
     return () => {
       cancelled = true;
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [cropMode, photo.original, edits.rotation]);
+  }, [cropMode, blob, edits.rotation]);
 
   function update<K extends keyof PhotoEdits>(key: K, value: PhotoEdits[K]) {
     setEdits((prev) => ({ ...prev, [key]: value }));
   }
 
   async function handleAutoEnhance() {
+    if (!blob) return;
     setEnhancing(true);
     try {
-      const suggestion = await suggestAutoEnhanceEdits(photo.original);
+      const suggestion = await suggestAutoEnhanceEdits(blob);
       setEdits((prev) => ({ ...prev, ...suggestion }));
     } finally {
       setEnhancing(false);
@@ -63,8 +66,9 @@ export function PhotoEditor({ photo, onSave, onClose }: Props) {
   }
 
   async function handleExport() {
-    const blob = await renderEditedImage(photo.original, edits, photo.mimeType || "image/jpeg");
-    const downloadUrl = URL.createObjectURL(blob);
+    if (!blob) return;
+    const exported = await renderEditedImage(blob, edits, photo.mimeType || "image/jpeg");
+    const downloadUrl = URL.createObjectURL(exported);
     const a = document.createElement("a");
     a.href = downloadUrl;
     a.download = `editada-${photo.fileName}`;
@@ -88,7 +92,9 @@ export function PhotoEditor({ photo, onSave, onClose }: Props) {
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal editor" onClick={(e) => e.stopPropagation()}>
         <div className="editor-preview">
-          {cropMode ? (
+          {!blob ? (
+            <p className="muted">Carregando foto…</p>
+          ) : cropMode ? (
             rotatedUrl && (
               <CropOverlay
                 imageUrl={rotatedUrl}
@@ -140,7 +146,7 @@ export function PhotoEditor({ photo, onSave, onClose }: Props) {
             </>
           ) : (
             <>
-              <button className="ai-button" onClick={handleAutoEnhance} disabled={enhancing}>
+              <button className="ai-button" onClick={handleAutoEnhance} disabled={enhancing || !blob}>
                 {enhancing ? "Analisando…" : "✨ Aprimorar com IA"}
               </button>
               <p className="muted tiny" style={{ marginTop: -8 }}>
@@ -202,7 +208,7 @@ export function PhotoEditor({ photo, onSave, onClose }: Props) {
               </label>
 
               <div className="editor-row">
-                <button className="ghost-button" onClick={openCropMode}>
+                <button className="ghost-button" onClick={openCropMode} disabled={!blob}>
                   ⬚ Recortar {edits.crop ? "(ativo)" : ""}
                 </button>
                 <button
@@ -222,7 +228,7 @@ export function PhotoEditor({ photo, onSave, onClose }: Props) {
                 <button className="ghost-button" onClick={onClose}>
                   Cancelar
                 </button>
-                <button className="ghost-button" onClick={handleExport}>
+                <button className="ghost-button" onClick={handleExport} disabled={!blob}>
                   Exportar
                 </button>
                 <button

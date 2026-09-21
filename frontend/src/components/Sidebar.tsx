@@ -11,6 +11,8 @@ interface Props {
   favoriteCount: number;
   albumPhotoCount: (albumId: string) => number;
   tagCounts: Array<{ tag: string; count: number }>;
+  username: string;
+  onLogout: () => void;
 }
 
 export function Sidebar({
@@ -23,6 +25,8 @@ export function Sidebar({
   favoriteCount,
   albumPhotoCount,
   tagCounts,
+  username,
+  onLogout,
 }: Props) {
   const activeKey = viewKey(currentView);
 
@@ -105,6 +109,13 @@ export function Sidebar({
           </div>
         </div>
       )}
+
+      <div className="sidebar-footer">
+        <span className="muted small truncate">{username}</span>
+        <button className="ghost-button" onClick={onLogout}>
+          Sair
+        </button>
+      </div>
     </aside>
   );
 }

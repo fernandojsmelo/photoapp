@@ -1,21 +1,36 @@
 # PhotoApp — Frontend
 
-Primeira versão testável localmente do PhotoApp (ver `../PRD.md`), focada só em frontend.
-React + Vite + TypeScript. Sem backend: fotos, álbuns e tags ficam salvos no **IndexedDB do
-seu navegador** (nada sai da sua máquina nesta versão).
+Frontend do PhotoApp (ver `../PRD.md`). React + Vite + TypeScript. Consome a API do
+backend (`../backend`) para persistir fotos, álbuns e tags — precisa do backend
+rodando para funcionar.
 
 ## Rodando localmente
+
+Em um terminal, suba o backend primeiro (ver `../backend/README.md`):
+
+```bash
+cd ../backend && npm install && npm run dev
+```
+
+Em outro terminal, suba o frontend:
 
 ```bash
 npm install
 npm run dev
 ```
 
-Abra o endereço mostrado no terminal (por padrão `http://localhost:5173`).
+Abra o endereço mostrado no terminal (por padrão `http://localhost:5173`). Na
+primeira vez, você vai ver uma tela para criar o único usuário deste servidor
+self-hosted.
+
+Se o backend não estiver em `http://localhost:4000`, configure `VITE_API_URL` em
+um arquivo `.env` (veja `.env.example`).
 
 ## O que já dá para testar
 
-- Importar fotos (botão "Importar fotos" ou arrastar e soltar na tela)
+- Criar conta / entrar (autenticação simples, usuário único do servidor)
+- Importar fotos (botão "Importar fotos" ou arrastar e soltar na tela) — o backend
+  calcula hash, lê EXIF e gera thumbnail
 - Detecção de duplicatas (mesma foto importada duas vezes é ignorada)
 - Organizar em álbuns e marcar com tags livres, com autocomplete de tags já usadas
 - Seleção múltipla de fotos (botão "Selecionar") com ações em massa: adicionar a
@@ -24,17 +39,19 @@ Abra o endereço mostrado no terminal (por padrão `http://localhost:5173`).
 - Favoritar fotos e buscar por nome de arquivo ou tag
 - Editor não-destrutivo: recorte (crop) interativo, rotação, brilho, contraste,
   saturação, exposição e presets de filtro
-- "Aprimorar com IA": heurística local de auto-contraste (placeholder até o backend
-  de IA do PRD estar disponível)
+- "Aprimorar com IA": heurística local de auto-contraste (placeholder até um
+  serviço de IA real existir, ver PRD)
 - "Sugerir tags com IA": heurística local de cor dominante/luminosidade da foto
   (mesmo placeholder, não é reconhecimento de conteúdo real)
 - Exportar a foto editada, já com recorte e filtros aplicados (download)
+- Dados persistem no servidor: recarregar a página ou voltar depois mantém tudo
 
 ## Limitações desta versão
 
-- Sem backend: nada é sincronizado entre dispositivos ou navegadores.
-- Busca é por texto (nome/tag), não semântica — a busca por IA real depende do
-  serviço de backend descrito no PRD.
+- Crop/rotação/filtros são aplicados no navegador (canvas), não no servidor — a
+  miniatura da grade não reflete o recorte (só o visualizador e o editor refletem).
+- Busca é por texto (nome/tag), não semântica — a busca por IA real depende de um
+  serviço de IA que ainda não existe (ver PRD).
 - "Aprimorar com IA" e "Sugerir tags com IA" são heurísticas locais (histograma e
   cor dominante), não modelos de IA reais — ficam claramente identificadas como
   tal na própria interface.

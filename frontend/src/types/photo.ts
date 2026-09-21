@@ -25,12 +25,12 @@ export interface PhotoRecord {
   hash: string;
   width: number;
   height: number;
+  sizeBytes: number;
   favorite: boolean;
   tags: string[];
   albumIds: string[];
   edits: PhotoEdits;
   exif: PhotoExif;
-  original: Blob;
 }
 
 export interface PhotoExif {
@@ -44,7 +44,6 @@ export interface AlbumRecord {
   id: string;
   name: string;
   createdAt: string;
-  coverPhotoId?: string;
 }
 
 export const DEFAULT_EDITS: PhotoEdits = {

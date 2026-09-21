@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { usePhotoBlob } from "../hooks/usePhotoBlob";
 import { useDisplayUrl } from "../hooks/useDisplayUrl";
 import { buildCssFilter, suggestTagsFromImage } from "../utils/imageProcessing";
 import { TagInput } from "./TagInput";
@@ -33,15 +34,17 @@ export function PhotoViewer({
   onDelete,
   onOpenEditor,
 }: Props) {
-  const url = useDisplayUrl(photo.original, photo.edits.crop, photo.edits.rotation);
+  const blob = usePhotoBlob(photo.id);
+  const url = useDisplayUrl(blob, photo.edits.crop, photo.edits.rotation);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [suggested, setSuggested] = useState<string[] | null>(null);
   const [suggesting, setSuggesting] = useState(false);
 
   async function handleSuggestTags() {
+    if (!blob) return;
     setSuggesting(true);
     try {
-      const tags = await suggestTagsFromImage(photo.original);
+      const tags = await suggestTagsFromImage(blob);
       setSuggested(tags.filter((tag) => !photo.tags.includes(tag)));
     } finally {
       setSuggesting(false);
@@ -85,7 +88,7 @@ export function PhotoViewer({
             <h3>Tags</h3>
             <TagInput tags={photo.tags} onChange={onSetTags} suggestions={allTags} />
             <div className="ai-suggest-row" style={{ marginTop: 8 }}>
-              <button className="ghost-button" onClick={handleSuggestTags} disabled={suggesting}>
+              <button className="ghost-button" onClick={handleSuggestTags} disabled={suggesting || !blob}>
                 {suggesting ? "Analisando…" : "✨ Sugerir tags com IA"}
               </button>
               {suggested?.map((tag) => (
@@ -138,7 +141,7 @@ export function PhotoViewer({
               </div>
               <div>
                 <dt>Tamanho</dt>
-                <dd>{formatBytes(photo.original.size)}</dd>
+                <dd>{formatBytes(photo.sizeBytes)}</dd>
               </div>
               <div>
                 <dt>Importada em</dt>

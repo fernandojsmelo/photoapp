@@ -6,9 +6,17 @@ import { PhotoViewer } from "./components/PhotoViewer";
 import { PhotoEditor } from "./components/PhotoEditor";
 import { AlbumModal } from "./components/AlbumModal";
 import { BulkActionBar } from "./components/BulkActionBar";
+import { AuthScreen } from "./components/AuthScreen";
+import { getAuthStatus, getMe, logout, type AuthUser } from "./api/client";
 import { usePhotoStore } from "./store/usePhotoStore";
 import type { LibraryView } from "./types/view";
 import "./App.css";
+
+type AuthState =
+  | { status: "checking" }
+  | { status: "needs-setup" }
+  | { status: "needs-login" }
+  | { status: "ready"; user: AuthUser };
 
 function matchesQuery(photo: { fileName: string; tags: string[] }, query: string): boolean {
   if (!query.trim()) return true;
@@ -26,11 +34,62 @@ function viewTitle(view: LibraryView, albumName?: string): string {
 }
 
 export default function App() {
+  const [auth, setAuth] = useState<AuthState>({ status: "checking" });
+
+  useEffect(() => {
+    let cancelled = false;
+    async function check() {
+      const { hasUser } = await getAuthStatus();
+      if (cancelled) return;
+      if (!hasUser) {
+        setAuth({ status: "needs-setup" });
+        return;
+      }
+      try {
+        const { user } = await getMe();
+        if (!cancelled) setAuth({ status: "ready", user });
+      } catch {
+        if (!cancelled) setAuth({ status: "needs-login" });
+      }
+    }
+    check();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (auth.status === "checking") {
+    return (
+      <div className="auth-shell">
+        <p className="muted">Conectando ao servidor…</p>
+      </div>
+    );
+  }
+
+  if (auth.status === "needs-setup" || auth.status === "needs-login") {
+    return (
+      <AuthScreen
+        mode={auth.status === "needs-setup" ? "setup" : "login"}
+        onAuthenticated={(user) => setAuth({ status: "ready", user })}
+      />
+    );
+  }
+
+  return (
+    <PhotoLibrary
+      user={auth.user}
+      onLogout={() => setAuth({ status: "needs-login" })}
+    />
+  );
+}
+
+function PhotoLibrary({ user, onLogout }: { user: AuthUser; onLogout: () => void }) {
   const {
     photos,
     albums,
     loading,
     init,
+    reset,
     importFiles,
     toggleFavorite,
     setTags,
@@ -58,6 +117,12 @@ export default function App() {
   useEffect(() => {
     init();
   }, [init]);
+
+  async function handleLogout() {
+    await logout();
+    reset();
+    onLogout();
+  }
 
   useEffect(() => {
     if (!feedback) return;
@@ -149,6 +214,8 @@ export default function App() {
         favoriteCount={photos.filter((p) => p.favorite).length}
         albumPhotoCount={(albumId) => photos.filter((p) => p.albumIds.includes(albumId)).length}
         tagCounts={tagCounts}
+        username={user.username}
+        onLogout={handleLogout}
       />
 
       <main className="main-column">
@@ -173,7 +240,7 @@ export default function App() {
               await addPhotosToAlbum(selectedIdList, album.id);
             }}
             onAddTag={(tag) => addTagToPhotos(selectedIdList, tag)}
-            onFavorite={() => setFavoriteMany(selectedIdList, true)}
+            onFavorite={() => setFavoriteMany(selectedIdList)}
             onDelete={() => {
               removePhotosMany(selectedIdList);
               exitSelection();
