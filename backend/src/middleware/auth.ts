@@ -1,6 +1,7 @@
 import type { NextFunction, Request, Response } from "express";
 import jwt from "jsonwebtoken";
 import { config } from "../config.js";
+import { getUserById } from "../services/userService.js";
 
 export const AUTH_COOKIE = "photoapp_token";
 
@@ -25,6 +26,15 @@ export function requireAuth(req: AuthedRequest, res: Response, next: NextFunctio
   } catch {
     res.status(401).json({ error: "invalid_token" });
   }
+}
+
+export function requireAdmin(req: AuthedRequest, res: Response, next: NextFunction): void {
+  const user = req.userId ? getUserById(req.userId) : null;
+  if (!user?.isAdmin) {
+    res.status(403).json({ error: "admin_required" });
+    return;
+  }
+  next();
 }
 
 export function setAuthCookie(res: Response, token: string): void {

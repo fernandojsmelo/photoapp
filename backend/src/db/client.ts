@@ -16,6 +16,7 @@ db.exec(`
     id TEXT PRIMARY KEY,
     username TEXT UNIQUE NOT NULL,
     password_hash TEXT NOT NULL,
+    is_admin INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL
   );
 
@@ -68,4 +69,13 @@ db.exec(`
 const photoColumns = db.prepare("PRAGMA table_info(photos)").all() as Array<{ name: string }>;
 if (!photoColumns.some((c) => c.name === "embedding")) {
   db.exec("ALTER TABLE photos ADD COLUMN embedding BLOB");
+}
+
+// Migração leve: bancos criados antes do multiusuário não têm `is_admin`.
+// O(s) usuário(s) já existentes viram admin, para não travar quem já tinha
+// um servidor rodando (single-user) sem ninguém habilitado a gerenciar contas.
+const userColumns = db.prepare("PRAGMA table_info(users)").all() as Array<{ name: string }>;
+if (!userColumns.some((c) => c.name === "is_admin")) {
+  db.exec("ALTER TABLE users ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0");
+  db.exec("UPDATE users SET is_admin = 1");
 }

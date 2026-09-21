@@ -7,6 +7,7 @@ import { config } from "./config.js";
 import { authRouter } from "./routes/auth.routes.js";
 import { photosRouter } from "./routes/photos.routes.js";
 import { albumsRouter } from "./routes/albums.routes.js";
+import { usersRouter } from "./routes/users.routes.js";
 
 export const app = express();
 
@@ -26,6 +27,7 @@ app.get("/api/health", (_req, res) => {
 app.use("/api/auth", authRouter);
 app.use("/api/photos", photosRouter);
 app.use("/api/albums", albumsRouter);
+app.use("/api/users", usersRouter);
 
 /**
  * Em produção (imagem Docker), o build do frontend é copiado para ./public

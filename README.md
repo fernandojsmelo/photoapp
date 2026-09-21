@@ -46,9 +46,11 @@ e portas separados (com CORS liberado entre eles) e o frontend recarrega a cada
 mudança de código — mais prático para desenvolver do que reconstruir a imagem
 Docker a cada alteração.
 
-Em ambos os modos, a primeira execução pede para criar o único usuário deste
-servidor self-hosted; depois disso, os dados (fotos, álbuns, tags) ficam
-persistidos entre sessões.
+Em ambos os modos, a primeira execução pede para criar o primeiro usuário deste
+servidor self-hosted (que vira administrador); depois disso, os dados (fotos,
+álbuns, tags) ficam persistidos entre sessões. O administrador pode cadastrar
+outras contas (ex.: família) pela tela "Usuários" dentro do app — cada pessoa
+só vê as próprias fotos.
 
 ## Estado atual
 
@@ -62,6 +64,9 @@ persistidos entre sessões.
   servidor doméstico/VPS.
 - IA de *aprimoramento* de imagem e sugestão de tags: ainda heurísticas locais
   no frontend, identificadas como placeholder na interface.
-- Self-hosted single-user: sem multiusuário/compartilhamento nesta fase.
+- **Multiusuário administrado**: o primeiro usuário (admin) cadastra as demais
+  contas pela tela "Usuários"; não há auto-registro público. Cada conta só
+  enxerga suas próprias fotos e álbuns — ainda sem álbuns compartilhados entre
+  contas.
 - Sem HTTPS embutido: para expor na internet, coloque um reverse proxy (Caddy,
   Traefik, nginx) na frente com TLS e `COOKIE_SECURE=true`.

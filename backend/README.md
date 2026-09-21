@@ -9,7 +9,10 @@ tags, usuário) e arquivos de imagem no disco.
 - Node.js + Express + TypeScript
 - SQLite (via `better-sqlite3`) — um único arquivo `data/photoapp.db`
 - Arquivos originais e thumbnails em `data/originals/` e `data/thumbnails/`
-- Autenticação por cookie httpOnly + JWT (usuário único, self-hosted)
+- Autenticação por cookie httpOnly + JWT, multiusuário administrado: o primeiro
+  usuário (setup inicial) vira admin e pode cadastrar as demais contas; não há
+  auto-registro público. Cada usuário só acessa suas próprias fotos e álbuns
+  (isolados por `user_id` em todas as tabelas).
 - Busca semântica por IA real: modelo CLIP (`Xenova/clip-vit-base-patch32`) rodando
   localmente via `@huggingface/transformers` — sem API externa, sem enviar fotos
   para fora do servidor. Cada foto ganha um embedding no upload; a busca compara
@@ -24,7 +27,9 @@ npm run dev
 ```
 
 A API sobe em `http://localhost:4000` por padrão. Na primeira execução, acesse o
-frontend — ele vai pedir para criar o único usuário deste servidor (tela de setup).
+frontend — ele vai pedir para criar o primeiro usuário deste servidor (tela de
+setup), que vira administrador. Contas adicionais são cadastradas por ele
+depois, pela tela "Usuários" dentro do app.
 
 > Para rodar tudo (frontend + backend) num único container, sem instalar Node
 > localmente, veja o `docker-compose.yml` na raiz do projeto.
@@ -42,8 +47,11 @@ frontend — ele vai pedir para criar o único usuário deste servidor (tela de 
 
 ## Endpoints principais
 
-- `POST /api/auth/setup` — cria o único usuário (só funciona se nenhum existir ainda)
+- `POST /api/auth/setup` — cria o primeiro usuário/admin (só funciona se nenhum existir ainda)
 - `POST /api/auth/login` / `POST /api/auth/logout` / `GET /api/auth/me`
+- `GET /api/users` / `POST /api/users` / `DELETE /api/users/:id` — gerenciamento
+  de usuários, restrito a admins (`requireAdmin`); não é possível excluir a si
+  mesmo nem o último admin restante
 - `GET /api/photos` — lista (filtros: `albumId`, `tag`, `favorite`, `q`)
 - `POST /api/photos` — upload multipart (`files`), com deduplicação por hash
 - `GET /api/photos/:id/file` / `GET /api/photos/:id/thumbnail`
