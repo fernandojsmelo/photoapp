@@ -1,8 +1,11 @@
 export type LibraryView =
   | { type: "all" }
   | { type: "favorites" }
-  | { type: "album"; albumId: string };
+  | { type: "album"; albumId: string }
+  | { type: "tag"; tag: string };
 
 export function viewKey(view: LibraryView): string {
-  return view.type === "album" ? `album:${view.albumId}` : view.type;
+  if (view.type === "album") return `album:${view.albumId}`;
+  if (view.type === "tag") return `tag:${view.tag}`;
+  return view.type;
 }

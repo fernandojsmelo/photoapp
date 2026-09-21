@@ -1,3 +1,10 @@
+export interface CropRect {
+  x: number; // 0..1, relativo à largura original
+  y: number; // 0..1, relativo à altura original
+  width: number; // 0..1
+  height: number; // 0..1
+}
+
 export interface PhotoEdits {
   brightness: number; // -100..100
   contrast: number; // -100..100
@@ -5,6 +12,7 @@ export interface PhotoEdits {
   exposure: number; // -100..100
   rotation: number; // 0, 90, 180, 270
   preset: PresetId;
+  crop: CropRect | null;
 }
 
 export type PresetId = "none" | "vivid" | "mono" | "warm" | "cool" | "fade";
@@ -46,4 +54,5 @@ export const DEFAULT_EDITS: PhotoEdits = {
   exposure: 0,
   rotation: 0,
   preset: "none",
+  crop: null,
 };

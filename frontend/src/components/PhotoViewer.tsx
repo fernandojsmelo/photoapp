@@ -1,12 +1,13 @@
 import { useState } from "react";
-import { useObjectUrl } from "../hooks/useObjectUrl";
-import { buildCssFilter } from "../utils/imageProcessing";
+import { useDisplayUrl } from "../hooks/useDisplayUrl";
+import { buildCssFilter, suggestTagsFromImage } from "../utils/imageProcessing";
 import { TagInput } from "./TagInput";
 import type { AlbumRecord, PhotoRecord } from "../types/photo";
 
 interface Props {
   photo: PhotoRecord;
   albums: AlbumRecord[];
+  allTags: string[];
   onClose: () => void;
   onToggleFavorite: () => void;
   onSetTags: (tags: string[]) => void;
@@ -24,6 +25,7 @@ function formatBytes(bytes: number): string {
 export function PhotoViewer({
   photo,
   albums,
+  allTags,
   onClose,
   onToggleFavorite,
   onSetTags,
@@ -31,8 +33,20 @@ export function PhotoViewer({
   onDelete,
   onOpenEditor,
 }: Props) {
-  const url = useObjectUrl(photo.original);
+  const url = useDisplayUrl(photo.original, photo.edits.crop, photo.edits.rotation);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [suggested, setSuggested] = useState<string[] | null>(null);
+  const [suggesting, setSuggesting] = useState(false);
+
+  async function handleSuggestTags() {
+    setSuggesting(true);
+    try {
+      const tags = await suggestTagsFromImage(photo.original);
+      setSuggested(tags.filter((tag) => !photo.tags.includes(tag)));
+    } finally {
+      setSuggesting(false);
+    }
+  }
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
@@ -44,7 +58,7 @@ export function PhotoViewer({
               alt={photo.fileName}
               style={{
                 filter: buildCssFilter(photo.edits),
-                transform: `rotate(${photo.edits.rotation}deg)`,
+                transform: photo.edits.crop ? undefined : `rotate(${photo.edits.rotation}deg)`,
               }}
             />
           )}
@@ -69,7 +83,31 @@ export function PhotoViewer({
 
           <section className="viewer-section">
             <h3>Tags</h3>
-            <TagInput tags={photo.tags} onChange={onSetTags} />
+            <TagInput tags={photo.tags} onChange={onSetTags} suggestions={allTags} />
+            <div className="ai-suggest-row" style={{ marginTop: 8 }}>
+              <button className="ghost-button" onClick={handleSuggestTags} disabled={suggesting}>
+                {suggesting ? "Analisando…" : "✨ Sugerir tags com IA"}
+              </button>
+              {suggested?.map((tag) => (
+                <button
+                  key={tag}
+                  className="tag-pill"
+                  onClick={() => {
+                    onSetTags([...photo.tags, tag]);
+                    setSuggested((prev) => prev?.filter((t) => t !== tag) ?? null);
+                  }}
+                >
+                  + {tag}
+                </button>
+              ))}
+              {suggested?.length === 0 && (
+                <span className="muted tiny">Nenhuma sugestão nova</span>
+              )}
+            </div>
+            <p className="muted tiny">
+              Sugestão por análise de cor local (sem enviar a foto para fora do navegador) —
+              placeholder até o reconhecimento de conteúdo por IA do backend (ver PRD).
+            </p>
           </section>
 
           <section className="viewer-section">

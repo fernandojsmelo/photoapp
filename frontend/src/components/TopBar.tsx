@@ -5,9 +5,18 @@ interface Props {
   onQueryChange: (value: string) => void;
   onImportFiles: (files: FileList) => void;
   title: string;
+  selectionMode: boolean;
+  onToggleSelectionMode: () => void;
 }
 
-export function TopBar({ query, onQueryChange, onImportFiles, title }: Props) {
+export function TopBar({
+  query,
+  onQueryChange,
+  onImportFiles,
+  title,
+  selectionMode,
+  onToggleSelectionMode,
+}: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
 
   return (
@@ -35,6 +44,9 @@ export function TopBar({ query, onQueryChange, onImportFiles, title }: Props) {
           e.target.value = "";
         }}
       />
+      <button className={`ghost-button ${selectionMode ? "active-toggle" : ""}`} onClick={onToggleSelectionMode}>
+        {selectionMode ? "Concluir seleção" : "Selecionar"}
+      </button>
       <button className="primary-button" onClick={() => inputRef.current?.click()}>
         + Importar fotos
       </button>

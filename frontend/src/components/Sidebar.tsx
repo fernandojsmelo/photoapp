@@ -10,6 +10,7 @@ interface Props {
   photoCount: number;
   favoriteCount: number;
   albumPhotoCount: (albumId: string) => number;
+  tagCounts: Array<{ tag: string; count: number }>;
 }
 
 export function Sidebar({
@@ -21,6 +22,7 @@ export function Sidebar({
   photoCount,
   favoriteCount,
   albumPhotoCount,
+  tagCounts,
 }: Props) {
   const activeKey = viewKey(currentView);
 
@@ -83,6 +85,26 @@ export function Sidebar({
           </div>
         ))}
       </div>
+
+      {tagCounts.length > 0 && (
+        <div className="nav-section">
+          <div className="nav-heading">
+            <span>Tags</span>
+          </div>
+          <div className="tag-cloud">
+            {tagCounts.map(({ tag, count }) => (
+              <button
+                key={tag}
+                className={`tag-pill ${activeKey === `tag:${tag}` ? "active" : ""}`}
+                onClick={() => onChangeView({ type: "tag", tag })}
+                title={`${count} foto(s)`}
+              >
+                {tag}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
     </aside>
   );
 }

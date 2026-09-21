@@ -5,6 +5,7 @@ import { PhotoGrid } from "./components/PhotoGrid";
 import { PhotoViewer } from "./components/PhotoViewer";
 import { PhotoEditor } from "./components/PhotoEditor";
 import { AlbumModal } from "./components/AlbumModal";
+import { BulkActionBar } from "./components/BulkActionBar";
 import { usePhotoStore } from "./store/usePhotoStore";
 import type { LibraryView } from "./types/view";
 import "./App.css";
@@ -20,6 +21,7 @@ function matchesQuery(photo: { fileName: string; tags: string[] }, query: string
 function viewTitle(view: LibraryView, albumName?: string): string {
   if (view.type === "all") return "Biblioteca";
   if (view.type === "favorites") return "Favoritos";
+  if (view.type === "tag") return `Tag: ${view.tag}`;
   return albumName ?? "Álbum";
 }
 
@@ -37,6 +39,10 @@ export default function App() {
     createAlbum,
     removeAlbum,
     togglePhotoInAlbum,
+    addPhotosToAlbum,
+    addTagToPhotos,
+    setFavoriteMany,
+    removePhotosMany,
   } = usePhotoStore();
 
   const [view, setView] = useState<LibraryView>({ type: "all" });
@@ -46,6 +52,8 @@ export default function App() {
   const [showAlbumModal, setShowAlbumModal] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     init();
@@ -60,6 +68,7 @@ export default function App() {
   const scoped = useMemo(() => {
     if (view.type === "favorites") return photos.filter((p) => p.favorite);
     if (view.type === "album") return photos.filter((p) => p.albumIds.includes(view.albumId));
+    if (view.type === "tag") return photos.filter((p) => p.tags.includes(view.tag));
     return photos;
   }, [photos, view]);
 
@@ -67,6 +76,20 @@ export default function App() {
     () => scoped.filter((photo) => matchesQuery(photo, query)),
     [scoped, query],
   );
+
+  const allTags = useMemo(() => {
+    const set = new Set<string>();
+    photos.forEach((p) => p.tags.forEach((t) => set.add(t)));
+    return [...set].sort();
+  }, [photos]);
+
+  const tagCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    photos.forEach((p) => p.tags.forEach((t) => counts.set(t, (counts.get(t) ?? 0) + 1)));
+    return [...counts.entries()]
+      .map(([tag, count]) => ({ tag, count }))
+      .sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag));
+  }, [photos]);
 
   const selectedPhoto = photos.find((p) => p.id === selectedPhotoId) ?? null;
   const editingPhoto = photos.find((p) => p.id === editingPhotoId) ?? null;
@@ -79,6 +102,22 @@ export default function App() {
     if (result.duplicates > 0) parts.push(`${result.duplicates} duplicata(s) ignorada(s)`);
     setFeedback(parts.length > 0 ? parts.join(" · ") : "Nenhuma imagem válida selecionada");
   }
+
+  function exitSelection() {
+    setSelectionMode(false);
+    setSelectedIds(new Set());
+  }
+
+  function toggleSelect(photoId: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(photoId)) next.delete(photoId);
+      else next.add(photoId);
+      return next;
+    });
+  }
+
+  const selectedIdList = [...selectedIds];
 
   return (
     <div
@@ -109,6 +148,7 @@ export default function App() {
         photoCount={photos.length}
         favoriteCount={photos.filter((p) => p.favorite).length}
         albumPhotoCount={(albumId) => photos.filter((p) => p.albumIds.includes(albumId)).length}
+        tagCounts={tagCounts}
       />
 
       <main className="main-column">
@@ -117,9 +157,30 @@ export default function App() {
           onQueryChange={setQuery}
           onImportFiles={handleImport}
           title={viewTitle(view, currentAlbum?.name)}
+          selectionMode={selectionMode}
+          onToggleSelectionMode={() => (selectionMode ? exitSelection() : setSelectionMode(true))}
         />
 
         {feedback && <div className="toast">{feedback}</div>}
+
+        {selectionMode && selectedIds.size > 0 && (
+          <BulkActionBar
+            count={selectedIds.size}
+            albums={albums}
+            onAddToAlbum={(albumId) => addPhotosToAlbum(selectedIdList, albumId)}
+            onCreateAlbumAndAdd={async (name) => {
+              const album = await createAlbum(name);
+              await addPhotosToAlbum(selectedIdList, album.id);
+            }}
+            onAddTag={(tag) => addTagToPhotos(selectedIdList, tag)}
+            onFavorite={() => setFavoriteMany(selectedIdList, true)}
+            onDelete={() => {
+              removePhotosMany(selectedIdList);
+              exitSelection();
+            }}
+            onCancel={exitSelection}
+          />
+        )}
 
         {loading ? (
           <div className="empty-state">
@@ -134,6 +195,9 @@ export default function App() {
                 ? "Sua biblioteca está vazia. Arraste fotos aqui ou clique em Importar."
                 : "Nenhuma foto encontrada com esse filtro."
             }
+            selectionMode={selectionMode}
+            selectedIds={selectedIds}
+            onToggleSelect={toggleSelect}
           />
         )}
 
@@ -148,6 +212,7 @@ export default function App() {
         <PhotoViewer
           photo={selectedPhoto}
           albums={albums}
+          allTags={allTags}
           onClose={() => setSelectedPhotoId(null)}
           onToggleFavorite={() => toggleFavorite(selectedPhoto.id)}
           onSetTags={(tags) => setTags(selectedPhoto.id, tags)}

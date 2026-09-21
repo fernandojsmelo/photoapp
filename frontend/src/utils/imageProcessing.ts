@@ -1,4 +1,4 @@
-import type { PhotoEdits, PresetId } from "../types/photo";
+import type { CropRect, PhotoEdits, PresetId } from "../types/photo";
 
 const PRESET_FILTERS: Record<PresetId, string> = {
   none: "",
@@ -39,27 +39,7 @@ async function loadImage(source: Blob): Promise<HTMLImageElement> {
   }
 }
 
-export async function renderEditedImage(
-  source: Blob,
-  edits: PhotoEdits,
-  mimeType = "image/jpeg",
-): Promise<Blob> {
-  const img = await loadImage(source);
-  const swapped = edits.rotation % 180 !== 0;
-  const canvas = document.createElement("canvas");
-  canvas.width = swapped ? img.naturalHeight : img.naturalWidth;
-  canvas.height = swapped ? img.naturalWidth : img.naturalHeight;
-
-  const ctx = canvas.getContext("2d");
-  if (!ctx) throw new Error("Canvas 2D não suportado neste navegador");
-
-  ctx.save();
-  ctx.translate(canvas.width / 2, canvas.height / 2);
-  ctx.rotate((edits.rotation * Math.PI) / 180);
-  ctx.filter = buildCssFilter(edits);
-  ctx.drawImage(img, -img.naturalWidth / 2, -img.naturalHeight / 2);
-  ctx.restore();
-
+function blobFromCanvas(canvas: HTMLCanvasElement, mimeType: string): Promise<Blob> {
   return new Promise((resolve, reject) => {
     canvas.toBlob(
       (blob) => (blob ? resolve(blob) : reject(new Error("Falha ao gerar imagem"))),
@@ -67,6 +47,78 @@ export async function renderEditedImage(
       0.92,
     );
   });
+}
+
+/** Desenha a imagem já rotacionada num canvas (sem crop, sem filtro). */
+function rotateToCanvas(img: HTMLImageElement, rotation: number): HTMLCanvasElement {
+  const swapped = rotation % 180 !== 0;
+  const canvas = document.createElement("canvas");
+  canvas.width = swapped ? img.naturalHeight : img.naturalWidth;
+  canvas.height = swapped ? img.naturalWidth : img.naturalHeight;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("Canvas 2D não suportado neste navegador");
+  ctx.translate(canvas.width / 2, canvas.height / 2);
+  ctx.rotate((rotation * Math.PI) / 180);
+  ctx.drawImage(img, -img.naturalWidth / 2, -img.naturalHeight / 2);
+  return canvas;
+}
+
+/**
+ * Gera a imagem já rotacionada (sem crop nem filtro). Usada como base para
+ * a interface de recorte no editor — o crop é definido em relação a este
+ * espaço já rotacionado, que é o que o usuário efetivamente vê na tela.
+ */
+export async function rotateOnlyBlob(source: Blob, rotation: number): Promise<Blob> {
+  if (rotation === 0) return source;
+  const img = await loadImage(source);
+  const canvas = rotateToCanvas(img, rotation);
+  return blobFromCanvas(canvas, "image/jpeg");
+}
+
+export async function renderEditedImage(
+  source: Blob,
+  edits: PhotoEdits,
+  mimeType = "image/jpeg",
+): Promise<Blob> {
+  const img = await loadImage(source);
+  const rotated = rotateToCanvas(img, edits.rotation);
+
+  const crop = edits.crop;
+  const sx = crop ? crop.x * rotated.width : 0;
+  const sy = crop ? crop.y * rotated.height : 0;
+  const sw = crop ? crop.width * rotated.width : rotated.width;
+  const sh = crop ? crop.height * rotated.height : rotated.height;
+
+  const canvas = document.createElement("canvas");
+  canvas.width = sw;
+  canvas.height = sh;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("Canvas 2D não suportado neste navegador");
+  ctx.filter = buildCssFilter(edits);
+  ctx.drawImage(rotated, sx, sy, sw, sh, 0, 0, sw, sh);
+
+  return blobFromCanvas(canvas, mimeType);
+}
+
+/**
+ * Gera apenas o recorte (após rotação, sem filtros de cor), usado para
+ * pré-visualizar o crop já aplicado nas miniaturas e no visualizador.
+ */
+export async function cropOnlyBlob(source: Blob, crop: CropRect, rotation = 0): Promise<Blob> {
+  const img = await loadImage(source);
+  const rotated = rotateToCanvas(img, rotation);
+  const sx = crop.x * rotated.width;
+  const sy = crop.y * rotated.height;
+  const sw = crop.width * rotated.width;
+  const sh = crop.height * rotated.height;
+
+  const canvas = document.createElement("canvas");
+  canvas.width = sw;
+  canvas.height = sh;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("Canvas 2D não suportado neste navegador");
+  ctx.drawImage(rotated, sx, sy, sw, sh, 0, 0, sw, sh);
+  return blobFromCanvas(canvas, "image/jpeg");
 }
 
 /**
@@ -111,6 +163,83 @@ export async function suggestAutoEnhanceEdits(
   return { brightness: Math.round(brightness), contrast: Math.round(contrast) };
 }
 
-export async function generateThumbnailUrl(source: Blob): Promise<string> {
-  return URL.createObjectURL(source);
+const HUE_TAGS: Array<{ max: number; tag: string }> = [
+  { max: 15, tag: "vermelho" },
+  { max: 45, tag: "laranja" },
+  { max: 70, tag: "amarelo" },
+  { max: 160, tag: "verde" },
+  { max: 200, tag: "ciano" },
+  { max: 260, tag: "azul" },
+  { max: 320, tag: "roxo" },
+  { max: 345, tag: "rosa" },
+  { max: 361, tag: "vermelho" },
+];
+
+function rgbToHsl(r: number, g: number, b: number) {
+  const rn = r / 255;
+  const gn = g / 255;
+  const bn = b / 255;
+  const max = Math.max(rn, gn, bn);
+  const min = Math.min(rn, gn, bn);
+  const l = (max + min) / 2;
+  const delta = max - min;
+  if (delta === 0) return { h: 0, s: 0, l };
+  const s = delta / (1 - Math.abs(2 * l - 1));
+  let h: number;
+  if (max === rn) h = ((gn - bn) / delta) % 6;
+  else if (max === gn) h = (bn - rn) / delta + 2;
+  else h = (rn - gn) / delta + 4;
+  h *= 60;
+  if (h < 0) h += 360;
+  return { h, s, l };
+}
+
+/**
+ * Sugere tags a partir de cor dominante e luminosidade média da imagem
+ * (amostragem em baixa resolução). Substituto local para o serviço de
+ * reconhecimento de conteúdo por IA descrito no PRD, enquanto o backend
+ * de busca semântica não existe — deixa claro na UI que é uma heurística,
+ * não reconhecimento real de objetos/cenas.
+ */
+export async function suggestTagsFromImage(source: Blob): Promise<string[]> {
+  const img = await loadImage(source);
+  const sampleSize = 60;
+  const canvas = document.createElement("canvas");
+  canvas.width = sampleSize;
+  canvas.height = sampleSize;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("Canvas 2D não suportado neste navegador");
+
+  ctx.drawImage(img, 0, 0, sampleSize, sampleSize);
+  const { data } = ctx.getImageData(0, 0, sampleSize, sampleSize);
+
+  let sumH = 0;
+  let sumS = 0;
+  let sumL = 0;
+  let count = 0;
+  for (let i = 0; i < data.length; i += 4) {
+    const { h, s, l } = rgbToHsl(data[i], data[i + 1], data[i + 2]);
+    sumH += h;
+    sumS += s;
+    sumL += l;
+    count++;
+  }
+
+  const avgS = sumS / count;
+  const avgL = sumL / count;
+  const avgH = sumH / count;
+
+  const tags: string[] = [];
+
+  if (avgS < 0.12) {
+    tags.push("preto e branco");
+  } else {
+    const hueTag = HUE_TAGS.find((entry) => avgH <= entry.max)?.tag;
+    if (hueTag) tags.push(hueTag);
+  }
+
+  if (avgL < 0.25) tags.push("escura");
+  else if (avgL > 0.75) tags.push("clara");
+
+  return tags;
 }

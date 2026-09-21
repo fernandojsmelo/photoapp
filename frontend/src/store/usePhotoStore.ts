@@ -32,6 +32,10 @@ interface PhotoStoreState {
   createAlbum: (name: string) => Promise<AlbumRecord>;
   removeAlbum: (albumId: string) => Promise<void>;
   togglePhotoInAlbum: (photoId: string, albumId: string) => Promise<void>;
+  addPhotosToAlbum: (photoIds: string[], albumId: string) => Promise<void>;
+  addTagToPhotos: (photoIds: string[], tag: string) => Promise<void>;
+  setFavoriteMany: (photoIds: string[], value: boolean) => Promise<void>;
+  removePhotosMany: (photoIds: string[]) => Promise<void>;
 }
 
 export const usePhotoStore = create<PhotoStoreState>((set, get) => ({
@@ -147,5 +151,37 @@ export const usePhotoStore = create<PhotoStoreState>((set, get) => ({
     };
     await putPhoto(updated);
     set((state) => ({ photos: state.photos.map((p) => (p.id === photoId ? updated : p)) }));
+  },
+
+  async addPhotosToAlbum(photoIds, albumId) {
+    const ids = new Set(photoIds);
+    const targets = get().photos.filter((p) => ids.has(p.id) && !p.albumIds.includes(albumId));
+    const updates = new Map(
+      targets.map((photo) => [photo.id, { ...photo, albumIds: [...photo.albumIds, albumId] }]),
+    );
+    await Promise.all([...updates.values()].map(putPhoto));
+    set((state) => ({ photos: state.photos.map((p) => updates.get(p.id) ?? p) }));
+  },
+
+  async addTagToPhotos(photoIds, tag) {
+    const ids = new Set(photoIds);
+    const targets = get().photos.filter((p) => ids.has(p.id) && !p.tags.includes(tag));
+    const updates = new Map(targets.map((photo) => [photo.id, { ...photo, tags: [...photo.tags, tag] }]));
+    await Promise.all([...updates.values()].map(putPhoto));
+    set((state) => ({ photos: state.photos.map((p) => updates.get(p.id) ?? p) }));
+  },
+
+  async setFavoriteMany(photoIds, value) {
+    const ids = new Set(photoIds);
+    const targets = get().photos.filter((p) => ids.has(p.id) && p.favorite !== value);
+    const updates = new Map(targets.map((photo) => [photo.id, { ...photo, favorite: value }]));
+    await Promise.all([...updates.values()].map(putPhoto));
+    set((state) => ({ photos: state.photos.map((p) => updates.get(p.id) ?? p) }));
+  },
+
+  async removePhotosMany(photoIds) {
+    const ids = new Set(photoIds);
+    await Promise.all(photoIds.map(dbDeletePhoto));
+    set((state) => ({ photos: state.photos.filter((p) => !ids.has(p.id)) }));
   },
 }));
