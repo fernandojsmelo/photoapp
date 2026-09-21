@@ -330,6 +330,13 @@
   width: fit-content;
 }
 
+.ai-toast {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-color: var(--accent);
+}
+
 /* Modals */
 .modal-backdrop {
   position: fixed;

@@ -133,6 +133,15 @@ export function listTagCounts() {
   return request<{ tags: Array<{ tag: string; count: number }> }>("/api/photos/tags");
 }
 
+export type PhotoSearchResult = PhotoRecord & { score: number };
+
+/** Busca semântica: modelo de IA local (CLIP) rankeia fotos por relevância ao texto. */
+export function searchPhotosSemantic(query: string) {
+  return request<{ photos: PhotoSearchResult[] }>(
+    `/api/photos/search?q=${encodeURIComponent(query)}`,
+  );
+}
+
 export function photoFileUrl(photoId: string): string {
   return `${API_BASE}/api/photos/${photoId}/file`;
 }

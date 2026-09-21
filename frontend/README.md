@@ -36,11 +36,14 @@ um arquivo `.env` (veja `.env.example`).
 - Seleção múltipla de fotos (botão "Selecionar") com ações em massa: adicionar a
   álbum (existente ou novo), adicionar tag, favoritar, excluir
 - Filtrar a biblioteca por álbum ou por tag (nuvem de tags na barra lateral)
-- Favoritar fotos e buscar por nome de arquivo ou tag
+- Favoritar fotos e buscar por nome de arquivo ou tag (filtro instantâneo)
+- **Busca por IA de verdade**: pressione Enter na busca para rankear fotos por
+  significado ("praia ao pôr do sol", "céu azul") usando um modelo CLIP rodando
+  no próprio backend — sem enviar fotos para nenhum serviço externo
 - Editor não-destrutivo: recorte (crop) interativo, rotação, brilho, contraste,
   saturação, exposição e presets de filtro
 - "Aprimorar com IA": heurística local de auto-contraste (placeholder até um
-  serviço de IA real existir, ver PRD)
+  modelo de aprimoramento real existir, ver PRD)
 - "Sugerir tags com IA": heurística local de cor dominante/luminosidade da foto
   (mesmo placeholder, não é reconhecimento de conteúdo real)
 - Exportar a foto editada, já com recorte e filtros aplicados (download)
@@ -50,11 +53,10 @@ um arquivo `.env` (veja `.env.example`).
 
 - Crop/rotação/filtros são aplicados no navegador (canvas), não no servidor — a
   miniatura da grade não reflete o recorte (só o visualizador e o editor refletem).
-- Busca é por texto (nome/tag), não semântica — a busca por IA real depende de um
-  serviço de IA que ainda não existe (ver PRD).
-- "Aprimorar com IA" e "Sugerir tags com IA" são heurísticas locais (histograma e
-  cor dominante), não modelos de IA reais — ficam claramente identificadas como
-  tal na própria interface.
+- "Aprimorar com IA" e "Sugerir tags com IA" continuam heurísticas locais
+  (histograma e cor dominante), não modelos de IA reais — ficam claramente
+  identificadas como tal na própria interface. Já a busca por IA (Enter na
+  busca) usa um modelo real (CLIP), não é heurística.
 
 ## Scripts
 

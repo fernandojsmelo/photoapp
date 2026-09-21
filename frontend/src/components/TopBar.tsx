@@ -3,6 +3,8 @@ import { useRef } from "react";
 interface Props {
   query: string;
   onQueryChange: (value: string) => void;
+  onSearchSubmit: (value: string) => void;
+  searchingAi: boolean;
   onImportFiles: (files: FileList) => void;
   title: string;
   selectionMode: boolean;
@@ -12,6 +14,8 @@ interface Props {
 export function TopBar({
   query,
   onQueryChange,
+  onSearchSubmit,
+  searchingAi,
   onImportFiles,
   title,
   selectionMode,
@@ -24,12 +28,15 @@ export function TopBar({
       <h1 className="view-title">{title}</h1>
 
       <div className="search-box">
-        <span className="search-icon">⌕</span>
+        <span className="search-icon">{searchingAi ? "✨" : "⌕"}</span>
         <input
           type="search"
-          placeholder="Buscar por nome ou tag…"
+          placeholder="Buscar por nome/tag, ou pressione Enter para buscar com IA…"
           value={query}
           onChange={(e) => onQueryChange(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") onSearchSubmit(query);
+          }}
         />
       </div>
 

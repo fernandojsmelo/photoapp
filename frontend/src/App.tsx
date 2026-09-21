@@ -7,9 +7,10 @@ import { PhotoEditor } from "./components/PhotoEditor";
 import { AlbumModal } from "./components/AlbumModal";
 import { BulkActionBar } from "./components/BulkActionBar";
 import { AuthScreen } from "./components/AuthScreen";
-import { getAuthStatus, getMe, logout, type AuthUser } from "./api/client";
+import { getAuthStatus, getMe, logout, searchPhotosSemantic, type AuthUser } from "./api/client";
 import { usePhotoStore } from "./store/usePhotoStore";
 import type { LibraryView } from "./types/view";
+import type { PhotoRecord } from "./types/photo";
 import "./App.css";
 
 type AuthState =
@@ -113,6 +114,10 @@ function PhotoLibrary({ user, onLogout }: { user: AuthUser; onLogout: () => void
   const [feedback, setFeedback] = useState<string | null>(null);
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [semanticQuery, setSemanticQuery] = useState<string | null>(null);
+  const [semanticResults, setSemanticResults] = useState<PhotoRecord[] | null>(null);
+  const [semanticLoading, setSemanticLoading] = useState(false);
+  const [semanticError, setSemanticError] = useState(false);
 
   useEffect(() => {
     init();
@@ -137,10 +142,35 @@ function PhotoLibrary({ user, onLogout }: { user: AuthUser; onLogout: () => void
     return photos;
   }, [photos, view]);
 
-  const filteredPhotos = useMemo(
-    () => scoped.filter((photo) => matchesQuery(photo, query)),
-    [scoped, query],
-  );
+  const filteredPhotos = useMemo(() => {
+    if (semanticResults) {
+      const scopedIds = new Set(scoped.map((p) => p.id));
+      return semanticResults.filter((p) => scopedIds.has(p.id));
+    }
+    return scoped.filter((photo) => matchesQuery(photo, query));
+  }, [scoped, query, semanticResults]);
+
+  function clearSemanticSearch() {
+    setSemanticQuery(null);
+    setSemanticResults(null);
+    setSemanticError(false);
+  }
+
+  async function handleSemanticSearch(rawQuery: string) {
+    const trimmed = rawQuery.trim();
+    if (!trimmed) return;
+    setSemanticLoading(true);
+    setSemanticError(false);
+    try {
+      const { photos: results } = await searchPhotosSemantic(trimmed);
+      setSemanticQuery(trimmed);
+      setSemanticResults(results);
+    } catch {
+      setSemanticError(true);
+    } finally {
+      setSemanticLoading(false);
+    }
+  }
 
   const allTags = useMemo(() => {
     const set = new Set<string>();
@@ -204,6 +234,7 @@ function PhotoLibrary({ user, onLogout }: { user: AuthUser; onLogout: () => void
         onChangeView={(next) => {
           setView(next);
           setQuery("");
+          clearSemanticSearch();
         }}
         onCreateAlbum={() => setShowAlbumModal(true)}
         onDeleteAlbum={(albumId) => {
@@ -221,7 +252,12 @@ function PhotoLibrary({ user, onLogout }: { user: AuthUser; onLogout: () => void
       <main className="main-column">
         <TopBar
           query={query}
-          onQueryChange={setQuery}
+          onQueryChange={(next) => {
+            setQuery(next);
+            if (!next.trim() && semanticResults) clearSemanticSearch();
+          }}
+          onSearchSubmit={handleSemanticSearch}
+          searchingAi={semanticLoading}
           onImportFiles={handleImport}
           title={viewTitle(view, currentAlbum?.name)}
           selectionMode={selectionMode}
@@ -229,6 +265,18 @@ function PhotoLibrary({ user, onLogout }: { user: AuthUser; onLogout: () => void
         />
 
         {feedback && <div className="toast">{feedback}</div>}
+
+        {semanticQuery && (
+          <div className="toast ai-toast">
+            <span>✨ Resultados por IA para "{semanticQuery}" ({filteredPhotos.length})</span>
+            <button className="ghost-button" onClick={clearSemanticSearch}>
+              Limpar
+            </button>
+          </div>
+        )}
+        {semanticError && (
+          <div className="toast">Busca por IA indisponível no momento — tente de novo em instantes.</div>
+        )}
 
         {selectionMode && selectedIds.size > 0 && (
           <BulkActionBar
