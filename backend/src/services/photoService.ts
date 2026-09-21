@@ -2,9 +2,10 @@ import { v4 as uuid } from "uuid";
 import exifr from "exifr";
 import sharp from "sharp";
 import { db } from "../db/client.js";
-import { deletePhotoFiles, saveOriginal, saveThumbnail } from "../storage/fileStorage.js";
+import { deletePhotoFiles, getOriginalPath, saveOriginal, saveThumbnail } from "../storage/fileStorage.js";
 import { sha256 } from "../utils/hash.js";
 import { DEFAULT_EDITS, type PhotoDTO, type PhotoEdits } from "../types/index.js";
+import { bufferToEmbedding, cosineSimilarity, embedImageFile, embeddingToBuffer } from "./embeddingService.js";
 
 interface PhotoRow {
   id: string;
@@ -23,6 +24,7 @@ interface PhotoRow {
   exif_latitude: number | null;
   exif_longitude: number | null;
   original_ext: string;
+  embedding: Buffer | null;
 }
 
 export interface PhotoListFilters {
@@ -185,11 +187,22 @@ export async function createPhoto(
   const takenAt = exif?.DateTimeOriginal ? new Date(exif.DateTimeOriginal).toISOString() : null;
   const cameraModel = exif ? [exif.Make, exif.Model].filter(Boolean).join(" ") || null : null;
 
+  // Embedding para busca semântica (modelo CLIP local). Se falhar por algum
+  // motivo, a foto ainda é salva normalmente — só não aparece em buscas por IA.
+  let embeddingBuffer: Buffer | null = null;
+  try {
+    const embedding = await embedImageFile(getOriginalPath(id, ext));
+    embeddingBuffer = embeddingToBuffer(embedding);
+  } catch (err) {
+    console.error("Falha ao gerar embedding da foto", id, err);
+  }
+
   db.prepare(
     `INSERT INTO photos (
       id, user_id, file_name, mime_type, imported_at, hash, width, height, size_bytes,
-      favorite, edits_json, exif_taken_at, exif_camera_model, exif_latitude, exif_longitude, original_ext
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?)`,
+      favorite, edits_json, exif_taken_at, exif_camera_model, exif_latitude, exif_longitude,
+      original_ext, embedding
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     id,
     userId,
@@ -206,9 +219,37 @@ export async function createPhoto(
     exif?.latitude ?? null,
     exif?.longitude ?? null,
     ext,
+    embeddingBuffer,
   );
 
   return { duplicate: false, photo: getPhotoDTO(userId, id)! };
+}
+
+/**
+ * Busca semântica: compara o embedding de texto da query com o embedding de
+ * cada foto do usuário (gerado no upload) por similaridade de cosseno.
+ * Calculado em memória — viável para bibliotecas pessoais (até dezenas de
+ * milhares de fotos); um volume muito maior pediria um índice vetorial.
+ */
+export function searchPhotosBySimilarity(
+  userId: string,
+  queryEmbedding: Float32Array,
+  limit = 60,
+): Array<PhotoDTO & { score: number }> {
+  const rows = db
+    .prepare("SELECT * FROM photos WHERE user_id = ? AND embedding IS NOT NULL")
+    .all(userId) as PhotoRow[];
+
+  const scored = rows
+    .map((row) => ({
+      row,
+      score: cosineSimilarity(queryEmbedding, bufferToEmbedding(row.embedding!)),
+    }))
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit);
+
+  const dtos = rowsToDTOs(scored.map((s) => s.row));
+  return dtos.map((dto, i) => ({ ...dto, score: scored[i].score }));
 }
 
 export interface PhotoPatch {

@@ -30,6 +30,12 @@ RUN npm ci --omit=dev && npm cache clean --force
 
 COPY --from=backend-build /app/backend/dist ./dist
 COPY --from=frontend-build /app/frontend/dist ./public
+COPY backend/scripts/warmup.mjs ./scripts/warmup.mjs
+
+# Baixa o modelo CLIP em tempo de build, para o container rodar 100% offline
+# depois de construído (self-hosted de verdade, sem depender de internet
+# na primeira request de busca/upload).
+RUN node scripts/warmup.mjs
 
 RUN mkdir -p /app/data
 VOLUME ["/app/data"]

@@ -42,7 +42,8 @@ db.exec(`
     exif_camera_model TEXT,
     exif_latitude REAL,
     exif_longitude REAL,
-    original_ext TEXT NOT NULL
+    original_ext TEXT NOT NULL,
+    embedding BLOB
   );
 
   CREATE INDEX IF NOT EXISTS idx_photos_user ON photos(user_id);
@@ -60,3 +61,11 @@ db.exec(`
     PRIMARY KEY (photo_id, album_id)
   );
 `);
+
+// Migração leve: bancos criados antes do recurso de busca semântica não têm
+// a coluna `embedding`. CREATE TABLE IF NOT EXISTS não adiciona colunas a
+// tabelas já existentes, então checamos e aplicamos ALTER TABLE se preciso.
+const photoColumns = db.prepare("PRAGMA table_info(photos)").all() as Array<{ name: string }>;
+if (!photoColumns.some((c) => c.name === "embedding")) {
+  db.exec("ALTER TABLE photos ADD COLUMN embedding BLOB");
+}

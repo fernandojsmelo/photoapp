@@ -52,13 +52,16 @@ persistidos entre sessões.
 
 ## Estado atual
 
-- Catalogação, álbuns, tags, favoritos, busca por texto e edição não-destrutiva
-  (crop, rotação, filtros) — funcionando ponta a ponta com persistência real.
-- Empacotado em Docker: um único container serve frontend + API, com dados
-  persistidos em volume — pronto para rodar num servidor doméstico/VPS.
-- IA de aprimoramento e sugestão de tags: heurísticas locais no frontend,
-  identificadas como placeholder na interface até existir um serviço de IA real.
-- Busca semântica por IA: ainda não implementada (depende de um serviço de IA).
+- Catalogação, álbuns, tags, favoritos e edição não-destrutiva (crop, rotação,
+  filtros) — funcionando ponta a ponta com persistência real.
+- **Busca por IA real**: modelo CLIP rodando localmente no backend (sem API
+  externa, sem enviar fotos para fora do servidor) rankeia fotos por
+  significado a partir de uma descrição em texto.
+- Empacotado em Docker: um único container serve frontend + API + modelo de
+  IA (já embutido na imagem, roda 100% offline) — pronto para rodar num
+  servidor doméstico/VPS.
+- IA de *aprimoramento* de imagem e sugestão de tags: ainda heurísticas locais
+  no frontend, identificadas como placeholder na interface.
 - Self-hosted single-user: sem multiusuário/compartilhamento nesta fase.
 - Sem HTTPS embutido: para expor na internet, coloque um reverse proxy (Caddy,
   Traefik, nginx) na frente com TLS e `COOKIE_SECURE=true`.

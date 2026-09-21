@@ -16,10 +16,12 @@ import {
   getPhotoRow,
   listPhotos,
   listTagCounts,
+  searchPhotosBySimilarity,
   togglePhotoAlbum,
   updatePhoto,
 } from "../services/photoService.js";
 import { albumBelongsToUser } from "../services/albumService.js";
+import { embedText } from "../services/embeddingService.js";
 
 export const photosRouter = Router();
 photosRouter.use(requireAuth);
@@ -45,6 +47,22 @@ photosRouter.get("/", (req: AuthedRequest, res) => {
 
 photosRouter.get("/tags", (req: AuthedRequest, res) => {
   res.json({ tags: listTagCounts(req.userId!) });
+});
+
+photosRouter.get("/search", async (req: AuthedRequest, res) => {
+  const q = req.query.q;
+  if (typeof q !== "string" || !q.trim()) {
+    res.status(400).json({ error: "missing_query" });
+    return;
+  }
+  try {
+    const queryEmbedding = await embedText(q.trim());
+    const photos = searchPhotosBySimilarity(req.userId!, queryEmbedding);
+    res.json({ photos });
+  } catch (err) {
+    console.error("Falha na busca semântica", err);
+    res.status(503).json({ error: "search_unavailable" });
+  }
 });
 
 photosRouter.post("/", upload.array("files", 30), async (req: AuthedRequest, res) => {

@@ -10,6 +10,10 @@ tags, usuário) e arquivos de imagem no disco.
 - SQLite (via `better-sqlite3`) — um único arquivo `data/photoapp.db`
 - Arquivos originais e thumbnails em `data/originals/` e `data/thumbnails/`
 - Autenticação por cookie httpOnly + JWT (usuário único, self-hosted)
+- Busca semântica por IA real: modelo CLIP (`Xenova/clip-vit-base-patch32`) rodando
+  localmente via `@huggingface/transformers` — sem API externa, sem enviar fotos
+  para fora do servidor. Cada foto ganha um embedding no upload; a busca compara
+  o embedding do texto da query com os das fotos por similaridade de cosseno.
 
 ## Rodando localmente
 
@@ -47,14 +51,29 @@ frontend — ele vai pedir para criar o único usuário deste servidor (tela de 
 - `POST /api/photos/:id/albums/:albumId` — associar/desassociar de um álbum
 - `POST /api/photos/bulk` — ações em massa (`addToAlbum`, `addTag`, `favorite`, `delete`)
 - `GET /api/photos/tags` — tags com contagem
+- `GET /api/photos/search?q=...` — busca semântica por IA (CLIP local), retorna
+  fotos ordenadas por similaridade ao texto da query
 - `GET /api/albums` / `POST /api/albums` / `DELETE /api/albums/:id`
 
 ## O que o backend NÃO faz (ainda)
 
 - Não processa crop/rotação/filtros — isso continua no frontend (canvas), que baixa
   o arquivo original e aplica os ajustes ao vivo e na exportação.
-- Não tem IA real de aprimoramento ou busca semântica — essas heurísticas locais
-  continuam no frontend, como placeholder documentado no PRD.
+- Não tem IA real de *aprimoramento* de imagem — essa heurística local (histograma)
+  continua no frontend, como placeholder documentado no PRD. A busca semântica,
+  porém, já é IA real (ver acima).
+- A similaridade da busca é calculada em memória a cada request (sem índice
+  vetorial) — viável para bibliotecas pessoais de até dezenas de milhares de
+  fotos; um volume bem maior pediria algo como sqlite-vec ou um índice dedicado.
+
+## Recursos necessários (busca por IA)
+
+O modelo CLIP (~600MB) é baixado uma vez e cacheado em `node_modules/@huggingface/transformers/.cache`.
+Em desenvolvimento (`npm run dev`), isso acontece na primeira vez que o servidor
+sobe (precisa de internet nessa primeira vez). Na imagem Docker, o modelo já vem
+embutido — o build baixa e o container roda offline depois disso (ver
+`scripts/warmup.mjs` e o `Dockerfile`). Rodar o modelo consome CPU/RAM extra
+(algumas centenas de MB); não precisa de GPU.
 
 ## Scripts
 
