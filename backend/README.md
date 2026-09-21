@@ -57,8 +57,10 @@ frontend — ele vai pedir para criar o único usuário deste servidor (tela de 
 
 ## O que o backend NÃO faz (ainda)
 
-- Não processa crop/rotação/filtros — isso continua no frontend (canvas), que baixa
-  o arquivo original e aplica os ajustes ao vivo e na exportação.
+- Regenera a *thumbnail* com crop/rotação aplicados (via `sharp`) sempre que
+  esses ajustes mudam via PATCH, mas não processa o *arquivo original* nem os
+  filtros de cor — isso continua no frontend (canvas), que baixa o original e
+  aplica os ajustes completos ao vivo e na exportação.
 - Não tem IA real de *aprimoramento* de imagem — essa heurística local (histograma)
   continua no frontend, como placeholder documentado no PRD. A busca semântica,
   porém, já é IA real (ver acima).

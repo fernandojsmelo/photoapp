@@ -47,12 +47,16 @@ um arquivo `.env` (veja `.env.example`).
 - "Sugerir tags com IA": heurística local de cor dominante/luminosidade da foto
   (mesmo placeholder, não é reconhecimento de conteúdo real)
 - Exportar a foto editada, já com recorte e filtros aplicados (download)
+- Miniatura da grade já reflete o recorte e a rotação (o backend regenera a
+  thumbnail com `sharp` quando esses ajustes mudam)
 - Dados persistem no servidor: recarregar a página ou voltar depois mantém tudo
 
 ## Limitações desta versão
 
-- Crop/rotação/filtros são aplicados no navegador (canvas), não no servidor — a
-  miniatura da grade não reflete o recorte (só o visualizador e o editor refletem).
+- Filtros de cor (brilho/contraste/saturação/presets) continuam sendo aplicados
+  só no navegador via CSS, não no servidor — na miniatura da grade eles aparecem
+  normalmente (CSS), mas não ficam "gravados" num arquivo processado no servidor
+  (isso só acontece ao exportar).
 - "Aprimorar com IA" e "Sugerir tags com IA" continuam heurísticas locais
   (histograma e cor dominante), não modelos de IA reais — ficam claramente
   identificadas como tal na própria interface. Já a busca por IA (Enter na

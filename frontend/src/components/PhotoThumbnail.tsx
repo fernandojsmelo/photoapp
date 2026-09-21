@@ -11,6 +11,10 @@ interface Props {
 }
 
 export function PhotoThumbnail({ photo, onClick, selectionMode, selected, onToggleSelect }: Props) {
+  // A miniatura já vem do servidor com crop e rotação aplicados (ver
+  // backend: buildThumbnailBuffer) — só os filtros de cor continuam no CSS.
+  const cacheBust = `${photo.edits.rotation}:${JSON.stringify(photo.edits.crop)}`;
+
   return (
     <button
       className={`thumb ${selected ? "selected" : ""}`}
@@ -18,13 +22,10 @@ export function PhotoThumbnail({ photo, onClick, selectionMode, selected, onTogg
       title={photo.fileName}
     >
       <img
-        src={photoThumbnailUrl(photo.id)}
+        src={photoThumbnailUrl(photo.id, cacheBust)}
         alt={photo.fileName}
         loading="lazy"
-        style={{
-          filter: buildCssFilter(photo.edits),
-          transform: `rotate(${photo.edits.rotation}deg)`,
-        }}
+        style={{ filter: buildCssFilter(photo.edits) }}
       />
       {photo.favorite && <span className="thumb-favorite">★</span>}
       {selectionMode && (

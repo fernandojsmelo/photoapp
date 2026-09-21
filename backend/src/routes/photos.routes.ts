@@ -137,13 +137,13 @@ const patchSchema = z.object({
   edits: editsSchema.optional(),
 });
 
-photosRouter.patch("/:id", (req: AuthedRequest, res) => {
+photosRouter.patch("/:id", async (req: AuthedRequest, res) => {
   const parsed = patchSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: "invalid_payload" });
     return;
   }
-  const photo = updatePhoto(req.userId!, param(req, "id"), parsed.data);
+  const photo = await updatePhoto(req.userId!, param(req, "id"), parsed.data);
   if (!photo) {
     res.status(404).end();
     return;

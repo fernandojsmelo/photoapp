@@ -146,8 +146,14 @@ export function photoFileUrl(photoId: string): string {
   return `${API_BASE}/api/photos/${photoId}/file`;
 }
 
-export function photoThumbnailUrl(photoId: string): string {
-  return `${API_BASE}/api/photos/${photoId}/thumbnail`;
+/**
+ * `cacheBust` deve mudar sempre que a geometria da foto (crop/rotação) mudar,
+ * para o navegador não continuar servindo a miniatura antiga do cache HTTP —
+ * a URL em si não muda quando a thumbnail é regenerada no servidor.
+ */
+export function photoThumbnailUrl(photoId: string, cacheBust?: string): string {
+  const base = `${API_BASE}/api/photos/${photoId}/thumbnail`;
+  return cacheBust ? `${base}?v=${encodeURIComponent(cacheBust)}` : base;
 }
 
 export async function fetchPhotoBlob(photoId: string): Promise<Blob> {

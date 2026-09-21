@@ -34,6 +34,33 @@ export interface PhotoListFilters {
   q?: string;
 }
 
+/**
+ * Gera o buffer da thumbnail já com a geometria do usuário aplicada
+ * (auto-orientação EXIF + rotação manual + recorte), para que a miniatura
+ * da grade reflita o crop sem o frontend precisar baixar o arquivo original.
+ * Filtros de cor (brilho/contraste/preset) continuam só no frontend via CSS.
+ */
+async function buildThumbnailBuffer(originalPath: string, edits: PhotoEdits): Promise<Buffer> {
+  let rotatedBuffer = await sharp(originalPath).rotate().toBuffer();
+  if (edits.rotation !== 0) {
+    rotatedBuffer = await sharp(rotatedBuffer).rotate(edits.rotation).toBuffer();
+  }
+
+  let pipeline = sharp(rotatedBuffer);
+  if (edits.crop) {
+    const { width, height } = await sharp(rotatedBuffer).metadata();
+    if (width && height) {
+      const left = Math.min(width - 1, Math.max(0, Math.round(edits.crop.x * width)));
+      const top = Math.min(height - 1, Math.max(0, Math.round(edits.crop.y * height)));
+      const cropWidth = Math.max(1, Math.min(width - left, Math.round(edits.crop.width * width)));
+      const cropHeight = Math.max(1, Math.min(height - top, Math.round(edits.crop.height * height)));
+      pipeline = pipeline.extract({ left, top, width: cropWidth, height: cropHeight });
+    }
+  }
+
+  return pipeline.resize(480, 480, { fit: "cover" }).jpeg({ quality: 78 }).toBuffer();
+}
+
 function extFromMime(mimeType: string): string {
   const map: Record<string, string> = {
     "image/jpeg": "jpg",
@@ -176,11 +203,7 @@ export async function createPhoto(
   const height = metadata.height ?? 0;
 
   saveOriginal(id, ext, file.buffer);
-  const thumbnail = await sharp(file.buffer)
-    .rotate()
-    .resize(480, 480, { fit: "cover" })
-    .jpeg({ quality: 78 })
-    .toBuffer();
+  const thumbnail = await buildThumbnailBuffer(getOriginalPath(id, ext), DEFAULT_EDITS);
   saveThumbnail(id, thumbnail);
 
   const importedAt = new Date().toISOString();
@@ -258,7 +281,17 @@ export interface PhotoPatch {
   edits?: PhotoEdits;
 }
 
-export function updatePhoto(userId: string, photoId: string, patch: PhotoPatch): PhotoDTO | null {
+function cropEquals(a: PhotoEdits["crop"], b: PhotoEdits["crop"]): boolean {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  return a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height;
+}
+
+export async function updatePhoto(
+  userId: string,
+  photoId: string,
+  patch: PhotoPatch,
+): Promise<PhotoDTO | null> {
   const row = getPhotoRow(userId, photoId);
   if (!row) return null;
 
@@ -270,6 +303,24 @@ export function updatePhoto(userId: string, photoId: string, patch: PhotoPatch):
       JSON.stringify(patch.edits),
       photoId,
     );
+
+    // A miniatura só precisa ser regenerada quando a geometria (crop/rotação)
+    // muda — ajustes de cor (brilho/contraste/preset) continuam aplicados só
+    // via CSS no frontend, sem custo de reprocessar a imagem no servidor.
+    const previousEdits = JSON.parse(row.edits_json) as PhotoEdits;
+    const geometryChanged =
+      previousEdits.rotation !== patch.edits.rotation || !cropEquals(previousEdits.crop, patch.edits.crop);
+    if (geometryChanged) {
+      try {
+        const thumbnail = await buildThumbnailBuffer(
+          getOriginalPath(photoId, row.original_ext),
+          patch.edits,
+        );
+        saveThumbnail(photoId, thumbnail);
+      } catch (err) {
+        console.error("Falha ao regenerar thumbnail da foto", photoId, err);
+      }
+    }
   }
   if (patch.tags !== undefined) {
     const tx = db.transaction((tags: string[]) => {
