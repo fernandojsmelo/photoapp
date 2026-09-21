@@ -1,0 +1,9 @@
+**/node_modules
+**/dist
+backend/data
+backend/public
+backend/.env
+frontend/.env
+**/.git
+**/*.log
+.playwright-mcp

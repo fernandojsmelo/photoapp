@@ -5,6 +5,7 @@ export const config = {
   port: Number(process.env.PORT ?? 4000),
   jwtSecret: process.env.JWT_SECRET ?? "dev-insecure-secret-change-me",
   dataDir: path.resolve(process.env.DATA_DIR ?? "./data"),
+  staticDir: process.env.STATIC_DIR ?? "./public",
   frontendOrigin: process.env.FRONTEND_ORIGIN ?? "http://localhost:5173",
   cookieSecure: process.env.COOKIE_SECURE === "true",
   isProduction: process.env.NODE_ENV === "production",

@@ -3,3 +3,6 @@
 
 # Sistema operacional
 .DS_Store
+
+# Docker / segredos locais
+.env

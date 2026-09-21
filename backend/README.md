@@ -22,12 +22,18 @@ npm run dev
 A API sobe em `http://localhost:4000` por padrão. Na primeira execução, acesse o
 frontend — ele vai pedir para criar o único usuário deste servidor (tela de setup).
 
+> Para rodar tudo (frontend + backend) num único container, sem instalar Node
+> localmente, veja o `docker-compose.yml` na raiz do projeto.
+
 ## Variáveis de ambiente (`.env`)
 
 - `PORT` — porta da API (padrão 4000)
 - `JWT_SECRET` — segredo para assinar os tokens de sessão (troque em produção)
 - `DATA_DIR` — onde ficam o banco SQLite e os arquivos de imagem (padrão `./data`)
-- `FRONTEND_ORIGIN` — origem permitida no CORS (padrão `http://localhost:5173`)
+- `STATIC_DIR` — pasta com o build do frontend a servir, se existir (padrão `./public`;
+  só é usada na imagem Docker — em dev essa pasta não existe e cada serviço roda solto)
+- `FRONTEND_ORIGIN` — origem permitida no CORS (padrão `http://localhost:5173`;
+  irrelevante quando frontend e backend são servidos juntos, como na imagem Docker)
 - `COOKIE_SECURE` — `true` para exigir HTTPS no cookie de sessão (produção atrás de TLS)
 
 ## Endpoints principais

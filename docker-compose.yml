@@ -1,0 +1,17 @@
+services:
+  photoapp:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "${PORT:-4000}:4000"
+    environment:
+      JWT_SECRET: ${JWT_SECRET:?Defina JWT_SECRET no arquivo .env antes de subir o container}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      DATA_DIR: /app/data
+    volumes:
+      - photoapp_data:/app/data
+    restart: unless-stopped
+
+volumes:
+  photoapp_data:

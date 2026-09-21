@@ -7,8 +7,26 @@ documento de requisitos completo (visão, escopo, roadmap).
 
 - [`frontend/`](frontend/README.md) — React + Vite + TypeScript (interface)
 - [`backend/`](backend/README.md) — Node.js + Express + SQLite (API e armazenamento)
+- `Dockerfile` / `docker-compose.yml` — empacotam os dois num único container
+  para uso self-hosted (recomendado)
 
-## Rodando localmente
+## Rodando com Docker (recomendado)
+
+```bash
+cp .env.example .env
+# edite .env e defina um JWT_SECRET forte (ex.: openssl rand -hex 32)
+
+docker compose up -d --build
+```
+
+Abra `http://localhost:4000`. Frontend e API rodam juntos, num único container,
+numa única porta — sem precisar instalar Node localmente. Os dados (banco SQLite
+e fotos) ficam num volume Docker nomeado (`photoapp_data`), sobrevivendo a
+`docker compose down` e a rebuilds da imagem (só somem com `down -v`).
+
+Para rodar numa porta diferente, edite `PORT` no `.env`.
+
+## Rodando sem Docker (desenvolvimento)
 
 ```bash
 # terminal 1 — backend
@@ -23,15 +41,24 @@ npm install
 npm run dev
 ```
 
-Abra `http://localhost:5173`. Na primeira execução, crie o único usuário deste
+Abra `http://localhost:5173`. Nesse modo, frontend e backend rodam em processos
+e portas separados (com CORS liberado entre eles) e o frontend recarrega a cada
+mudança de código — mais prático para desenvolver do que reconstruir a imagem
+Docker a cada alteração.
+
+Em ambos os modos, a primeira execução pede para criar o único usuário deste
 servidor self-hosted; depois disso, os dados (fotos, álbuns, tags) ficam
-persistidos no backend entre sessões.
+persistidos entre sessões.
 
 ## Estado atual
 
 - Catalogação, álbuns, tags, favoritos, busca por texto e edição não-destrutiva
   (crop, rotação, filtros) — funcionando ponta a ponta com persistência real.
+- Empacotado em Docker: um único container serve frontend + API, com dados
+  persistidos em volume — pronto para rodar num servidor doméstico/VPS.
 - IA de aprimoramento e sugestão de tags: heurísticas locais no frontend,
   identificadas como placeholder na interface até existir um serviço de IA real.
 - Busca semântica por IA: ainda não implementada (depende de um serviço de IA).
 - Self-hosted single-user: sem multiusuário/compartilhamento nesta fase.
+- Sem HTTPS embutido: para expor na internet, coloque um reverse proxy (Caddy,
+  Traefik, nginx) na frente com TLS e `COOKIE_SECURE=true`.
