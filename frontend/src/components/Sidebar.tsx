@@ -9,6 +9,7 @@ interface Props {
   onDeleteAlbum: (albumId: string) => void;
   photoCount: number;
   favoriteCount: number;
+  sharedPhotosCount: number;
   albumPhotoCount: (albumId: string) => number;
   tagCounts: Array<{ tag: string; count: number }>;
   username: string;
@@ -26,6 +27,7 @@ export function Sidebar({
   onDeleteAlbum,
   photoCount,
   favoriteCount,
+  sharedPhotosCount,
   albumPhotoCount,
   tagCounts,
   username,
@@ -108,11 +110,20 @@ export function Sidebar({
         ))}
       </div>
 
-      {sharedAlbums.length > 0 && (
+      {(sharedAlbums.length > 0 || sharedPhotosCount > 0) && (
         <div className="nav-section">
           <div className="nav-heading">
             <span>Compartilhados comigo</span>
           </div>
+          {sharedPhotosCount > 0 && (
+            <button
+              className={`nav-item ${activeKey === "sharedPhotos" ? "active" : ""}`}
+              onClick={() => onChangeView({ type: "sharedPhotos" })}
+            >
+              <span>📤 Fotos compartilhadas</span>
+              <span className="count">{sharedPhotosCount}</span>
+            </button>
+          )}
           {sharedAlbums.map((album) => (
             <button
               key={album.id}

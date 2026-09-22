@@ -33,6 +33,7 @@ function viewTitle(view: LibraryView, albumName?: string): string {
   if (view.type === "all") return "Biblioteca";
   if (view.type === "favorites") return "Favoritos";
   if (view.type === "tag") return `Tag: ${view.tag}`;
+  if (view.type === "sharedPhotos") return "Fotos compartilhadas comigo";
   return albumName ?? "Álbum";
 }
 
@@ -90,6 +91,7 @@ function PhotoLibrary({ user, onLogout }: { user: AuthUser; onLogout: () => void
   const {
     photos,
     albums,
+    sharedPhotos,
     loading,
     init,
     reset,
@@ -106,6 +108,8 @@ function PhotoLibrary({ user, onLogout }: { user: AuthUser; onLogout: () => void
     setFavoriteMany,
     removePhotosMany,
     fetchAlbumPhotos,
+    refreshSharedPhotos,
+    sharePhotosMany,
   } = usePhotoStore();
 
   const [view, setView] = useState<LibraryView>({ type: "all" });
@@ -161,12 +165,18 @@ function PhotoLibrary({ user, onLogout }: { user: AuthUser; onLogout: () => void
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view.type === "album" ? view.albumId : null]);
 
+  useEffect(() => {
+    if (view.type === "sharedPhotos") refreshSharedPhotos();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view.type]);
+
   const scoped = useMemo(() => {
     if (view.type === "favorites") return photos.filter((p) => p.favorite);
     if (view.type === "album") return albumViewPhotos ?? [];
     if (view.type === "tag") return photos.filter((p) => p.tags.includes(view.tag));
+    if (view.type === "sharedPhotos") return sharedPhotos;
     return photos;
-  }, [photos, view, albumViewPhotos]);
+  }, [photos, view, albumViewPhotos, sharedPhotos]);
 
   const filteredPhotos = useMemo(() => {
     if (semanticResults) {
@@ -219,11 +229,12 @@ function PhotoLibrary({ user, onLogout }: { user: AuthUser; onLogout: () => void
   const editingPhoto = photos.find((p) => p.id === editingPhotoId) ?? null;
   const currentAlbum = view.type === "album" ? albums.find((a) => a.id === view.albumId) : undefined;
   const isReadOnlyAlbumView = currentAlbum ? !currentAlbum.isOwner : false;
+  const isReadOnlyView = isReadOnlyAlbumView || view.type === "sharedPhotos";
 
   useEffect(() => {
-    if (isReadOnlyAlbumView) exitSelection();
+    if (isReadOnlyView) exitSelection();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isReadOnlyAlbumView]);
+  }, [isReadOnlyView]);
 
   async function handleImport(files: FileList | File[]) {
     const result = await importFiles(files);
@@ -278,6 +289,7 @@ function PhotoLibrary({ user, onLogout }: { user: AuthUser; onLogout: () => void
         }}
         photoCount={photos.length}
         favoriteCount={photos.filter((p) => p.favorite).length}
+        sharedPhotosCount={sharedPhotos.length}
         albumPhotoCount={(albumId) => photos.filter((p) => p.albumIds.includes(albumId)).length}
         tagCounts={tagCounts}
         username={user.username}
@@ -300,7 +312,7 @@ function PhotoLibrary({ user, onLogout }: { user: AuthUser; onLogout: () => void
           title={viewTitle(view, currentAlbum?.name)}
           selectionMode={selectionMode}
           onToggleSelectionMode={() => (selectionMode ? exitSelection() : setSelectionMode(true))}
-          selectionDisabled={isReadOnlyAlbumView}
+          selectionDisabled={isReadOnlyView}
         />
 
         {feedback && <div className="toast">{feedback}</div>}
@@ -331,6 +343,14 @@ function PhotoLibrary({ user, onLogout }: { user: AuthUser; onLogout: () => void
             onDelete={() => {
               removePhotosMany(selectedIdList);
               exitSelection();
+            }}
+            onSharePhotos={async (username) => {
+              try {
+                await sharePhotosMany(selectedIdList, username);
+                setFeedback(`${selectedIdList.length} foto(s) compartilhada(s) com ${username}`);
+              } catch {
+                setFeedback(`Não foi possível compartilhar com "${username}"`);
+              }
             }}
             onCancel={exitSelection}
           />
@@ -378,7 +398,6 @@ function PhotoLibrary({ user, onLogout }: { user: AuthUser; onLogout: () => void
           onOpenEditor={() => {
             setEditingPhotoId(selectedPhoto.id);
           }}
-          sharedByUsername={currentAlbum?.ownerUsername}
         />
       )}
 
@@ -405,7 +424,11 @@ function PhotoLibrary({ user, onLogout }: { user: AuthUser; onLogout: () => void
       )}
 
       {shareAlbumTarget && (
-        <ShareAlbumModal album={shareAlbumTarget} onClose={() => setShareAlbumTarget(null)} />
+        <ShareAlbumModal
+          album={shareAlbumTarget}
+          albumPhotos={photos.filter((p) => p.albumIds.includes(shareAlbumTarget.id))}
+          onClose={() => setShareAlbumTarget(null)}
+        />
       )}
     </div>
   );

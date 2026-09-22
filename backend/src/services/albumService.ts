@@ -34,14 +34,15 @@ export function listAlbums(userId: string): AlbumDTO[] {
   const shared = db
     .prepare(
       `SELECT a.*, u.username as owner_username,
-              (SELECT COUNT(*) FROM photo_albums pa WHERE pa.album_id = a.id) as photo_count
+              (SELECT COUNT(*) FROM album_share_photos asp
+                WHERE asp.album_id = a.id AND asp.shared_with_user_id = ?) as photo_count
        FROM album_shares s
        JOIN albums a ON a.id = s.album_id
        JOIN users u ON u.id = a.user_id
        WHERE s.shared_with_user_id = ?
        ORDER BY s.created_at ASC`,
     )
-    .all(userId) as Array<AlbumRow & { owner_username: string }>;
+    .all(userId, userId) as Array<AlbumRow & { owner_username: string }>;
 
   return [
     ...own.map(toOwnDTO),
@@ -98,10 +99,36 @@ export function resolveAlbumAccess(
   return shared ? { ownerId: row.user_id } : null;
 }
 
+/** Substitui as fotos visíveis de um compartilhamento já existente (album_id, targetUserId). */
+function setSharePhotos(albumId: string, targetUserId: string, photoIds: string[]): void {
+  const validIds = photoIds.length
+    ? (db
+        .prepare(
+          `SELECT id FROM photos WHERE id IN (${photoIds.map(() => "?").join(",")}) AND EXISTS (
+             SELECT 1 FROM photo_albums pa WHERE pa.photo_id = photos.id AND pa.album_id = ?
+           )`,
+        )
+        .all(...photoIds, albumId) as Array<{ id: string }>).map((r) => r.id)
+    : [];
+
+  const tx = db.transaction(() => {
+    db.prepare("DELETE FROM album_share_photos WHERE album_id = ? AND shared_with_user_id = ?").run(
+      albumId,
+      targetUserId,
+    );
+    const insert = db.prepare(
+      "INSERT OR IGNORE INTO album_share_photos (album_id, shared_with_user_id, photo_id) VALUES (?, ?, ?)",
+    );
+    for (const photoId of validIds) insert.run(albumId, targetUserId, photoId);
+  });
+  tx();
+}
+
 export function shareAlbum(
   ownerId: string,
   albumId: string,
   targetUsername: string,
+  photoIds: string[],
 ): { ok: true } | { ok: false; error: "album_not_found" | "user_not_found" | "cannot_share_with_self" } {
   if (!albumBelongsToUser(ownerId, albumId)) {
     return { ok: false, error: "album_not_found" };
@@ -118,7 +145,24 @@ export function shareAlbum(
   db.prepare(
     "INSERT OR IGNORE INTO album_shares (album_id, shared_with_user_id, created_at) VALUES (?, ?, ?)",
   ).run(albumId, target.id, new Date().toISOString());
+  setSharePhotos(albumId, target.id, photoIds);
   return { ok: true };
+}
+
+/** Atualiza quais fotos do álbum ficam visíveis para um compartilhamento já existente. */
+export function updateAlbumSharePhotos(
+  ownerId: string,
+  albumId: string,
+  targetUserId: string,
+  photoIds: string[],
+): boolean {
+  if (!albumBelongsToUser(ownerId, albumId)) return false;
+  const exists = db
+    .prepare("SELECT 1 FROM album_shares WHERE album_id = ? AND shared_with_user_id = ?")
+    .get(albumId, targetUserId);
+  if (!exists) return false;
+  setSharePhotos(albumId, targetUserId, photoIds);
+  return true;
 }
 
 export function unshareAlbum(ownerId: string, albumId: string, targetUserId: string): boolean {
@@ -141,5 +185,20 @@ export function listAlbumShares(ownerId: string, albumId: string): AlbumShareDTO
        ORDER BY u.username ASC`,
     )
     .all(albumId) as Array<{ user_id: string; username: string }>;
-  return rows.map((r) => ({ userId: r.user_id, username: r.username }));
+
+  const photoRows = db
+    .prepare("SELECT shared_with_user_id, photo_id FROM album_share_photos WHERE album_id = ?")
+    .all(albumId) as Array<{ shared_with_user_id: string; photo_id: string }>;
+  const photosByUser = new Map<string, string[]>();
+  for (const row of photoRows) {
+    const list = photosByUser.get(row.shared_with_user_id) ?? [];
+    list.push(row.photo_id);
+    photosByUser.set(row.shared_with_user_id, list);
+  }
+
+  return rows.map((r) => ({
+    userId: r.user_id,
+    username: r.username,
+    photoIds: photosByUser.get(r.user_id) ?? [],
+  }));
 }

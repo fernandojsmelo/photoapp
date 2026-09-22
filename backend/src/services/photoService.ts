@@ -4,7 +4,7 @@ import sharp, { type Sharp } from "sharp";
 import { db } from "../db/client.js";
 import { deletePhotoFiles, getOriginalPath, saveOriginal, saveThumbnail } from "../storage/fileStorage.js";
 import { sha256 } from "../utils/hash.js";
-import { DEFAULT_EDITS, type PhotoDTO, type PhotoEdits } from "../types/index.js";
+import { DEFAULT_EDITS, type PhotoDTO, type PhotoEdits, type PhotoShareDTO } from "../types/index.js";
 import { bufferToEmbedding, cosineSimilarity, embedImageFile, embeddingToBuffer } from "./embeddingService.js";
 import { resolveAlbumAccess } from "./albumService.js";
 
@@ -138,7 +138,19 @@ function albumIdsForPhotos(photoIds: string[]): Map<string, string[]> {
   return map;
 }
 
+const usernameCache = new Map<string, string>();
+function usernameFor(userId: string): string {
+  if (!usernameCache.has(userId)) {
+    const row = db.prepare("SELECT username FROM users WHERE id = ?").get(userId) as
+      | { username: string }
+      | undefined;
+    usernameCache.set(userId, row?.username ?? "outro usuário");
+  }
+  return usernameCache.get(userId)!;
+}
+
 function toDTO(row: PhotoRow, tags: string[], albumIds: string[], requestingUserId: string): PhotoDTO {
+  const readOnly = row.user_id !== requestingUserId;
   return {
     id: row.id,
     fileName: row.file_name,
@@ -158,7 +170,8 @@ function toDTO(row: PhotoRow, tags: string[], albumIds: string[], requestingUser
       latitude: row.exif_latitude ?? undefined,
       longitude: row.exif_longitude ?? undefined,
     },
-    readOnly: row.user_id !== requestingUserId,
+    readOnly,
+    sharedByUsername: readOnly ? usernameFor(row.user_id) : undefined,
   };
 }
 
@@ -193,6 +206,17 @@ export function listPhotos(userId: string, filters: PhotoListFilters): PhotoDTO[
     joins += " JOIN photo_albums pa ON pa.photo_id = p.id";
     clauses.push("pa.album_id = ?");
     params.push(filters.albumId);
+
+    // Quando quem pede não é o dono, só entram as fotos que o dono marcou
+    // como visíveis para ele nesse álbum — compartilhar não libera tudo.
+    // O parâmetro dessa condição vai em `clauses` (WHERE), não dentro do
+    // JOIN, porque o texto de `joins` é montado antes do WHERE na consulta
+    // final — um `?` dentro do JOIN ficaria fora de ordem com os params.
+    if (ownerScope !== userId) {
+      joins += " JOIN album_share_photos asp ON asp.album_id = pa.album_id AND asp.photo_id = p.id";
+      clauses.push("asp.shared_with_user_id = ?");
+      params.push(userId);
+    }
   }
   if (filters.tag) {
     joins += " JOIN photo_tags pt ON pt.photo_id = p.id";
@@ -229,8 +253,9 @@ export function getPhotoDTO(userId: string, photoId: string): PhotoDTO | null {
 
 /**
  * Busca uma foto para leitura (servir arquivo/thumbnail), permitindo acesso
- * se o requisitante é o dono OU a foto está em algum álbum compartilhado com
- * ele. Ações de escrita continuam usando getPhotoRow (só dono).
+ * se o requisitante é o dono, a foto foi liberada para ele dentro de um
+ * álbum compartilhado, ou foi compartilhada avulsa (sem álbum). Ações de
+ * escrita continuam usando getPhotoRow (só dono).
  */
 export function getPhotoRowForViewing(requestingUserId: string, photoId: string): PhotoRow | null {
   const own = db.prepare("SELECT * FROM photos WHERE id = ? AND user_id = ?").get(
@@ -239,16 +264,25 @@ export function getPhotoRowForViewing(requestingUserId: string, photoId: string)
   ) as PhotoRow | undefined;
   if (own) return own;
 
-  const viaShare = db
+  const viaAlbumShare = db
     .prepare(
       `SELECT p.* FROM photos p
-       JOIN photo_albums pa ON pa.photo_id = p.id
-       JOIN album_shares s ON s.album_id = pa.album_id
-       WHERE p.id = ? AND s.shared_with_user_id = ?
+       JOIN album_share_photos asp ON asp.photo_id = p.id
+       WHERE p.id = ? AND asp.shared_with_user_id = ?
        LIMIT 1`,
     )
     .get(photoId, requestingUserId) as PhotoRow | undefined;
-  return viaShare ?? null;
+  if (viaAlbumShare) return viaAlbumShare;
+
+  const viaStandaloneShare = db
+    .prepare(
+      `SELECT p.* FROM photos p
+       JOIN photo_shares ps ON ps.photo_id = p.id
+       WHERE p.id = ? AND ps.shared_with_user_id = ?
+       LIMIT 1`,
+    )
+    .get(photoId, requestingUserId) as PhotoRow | undefined;
+  return viaStandaloneShare ?? null;
 }
 
 export function getPhotoRow(userId: string, photoId: string): PhotoRow | null {
@@ -503,4 +537,65 @@ export function listTagCounts(userId: string): Array<{ tag: string; count: numbe
     )
     .all(userId) as Array<{ tag: string; count: number }>;
   return rows;
+}
+
+/** Fotos avulsas (sem álbum) que outras pessoas compartilharam com `userId`. */
+export function listSharedPhotos(userId: string): PhotoDTO[] {
+  const rows = db
+    .prepare(
+      `SELECT p.* FROM photos p
+       JOIN photo_shares ps ON ps.photo_id = p.id
+       WHERE ps.shared_with_user_id = ?
+       ORDER BY p.imported_at DESC`,
+    )
+    .all(userId) as PhotoRow[];
+  return rowsToDTOs(rows, userId);
+}
+
+/** Compartilha fotos avulsas (sem vínculo de álbum) com outro usuário do servidor. */
+export function sharePhotos(
+  ownerId: string,
+  photoIds: string[],
+  targetUsername: string,
+): { ok: true } | { ok: false; error: "user_not_found" | "cannot_share_with_self" } {
+  const target = db.prepare("SELECT id FROM users WHERE username = ?").get(targetUsername) as
+    | { id: string }
+    | undefined;
+  if (!target) return { ok: false, error: "user_not_found" };
+  if (target.id === ownerId) return { ok: false, error: "cannot_share_with_self" };
+
+  const ids = ownedPhotoIds(ownerId, photoIds);
+  const insert = db.prepare(
+    "INSERT OR IGNORE INTO photo_shares (photo_id, shared_with_user_id, created_at) VALUES (?, ?, ?)",
+  );
+  const createdAt = new Date().toISOString();
+  const tx = db.transaction(() => {
+    for (const id of ids) insert.run(id, target.id, createdAt);
+  });
+  tx();
+  return { ok: true };
+}
+
+export function unsharePhoto(ownerId: string, photoId: string, targetUserId: string): boolean {
+  if (!getPhotoRow(ownerId, photoId)) return false;
+  db.prepare("DELETE FROM photo_shares WHERE photo_id = ? AND shared_with_user_id = ?").run(
+    photoId,
+    targetUserId,
+  );
+  return true;
+}
+
+/** Com quem uma foto (avulsa) do próprio usuário está compartilhada. */
+export function listPhotoShares(ownerId: string, photoId: string): PhotoShareDTO[] | null {
+  if (!getPhotoRow(ownerId, photoId)) return null;
+  const rows = db
+    .prepare(
+      `SELECT u.id as user_id, u.username
+       FROM photo_shares ps
+       JOIN users u ON u.id = ps.shared_with_user_id
+       WHERE ps.photo_id = ?
+       ORDER BY u.username ASC`,
+    )
+    .all(photoId) as Array<{ user_id: string; username: string }>;
+  return rows.map((r) => ({ userId: r.user_id, username: r.username }));
 }

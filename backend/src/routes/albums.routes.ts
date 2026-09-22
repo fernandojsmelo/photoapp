@@ -9,6 +9,7 @@ import {
   listAlbums,
   shareAlbum,
   unshareAlbum,
+  updateAlbumSharePhotos,
 } from "../services/albumService.js";
 
 export const albumsRouter = Router();
@@ -44,7 +45,7 @@ albumsRouter.get("/:id/shares", (req: AuthedRequest, res) => {
   res.json({ shares });
 });
 
-const shareSchema = z.object({ username: z.string().min(1) });
+const shareSchema = z.object({ username: z.string().min(1), photoIds: z.array(z.string()) });
 
 albumsRouter.post("/:id/shares", (req: AuthedRequest, res) => {
   const parsed = shareSchema.safeParse(req.body);
@@ -52,13 +53,39 @@ albumsRouter.post("/:id/shares", (req: AuthedRequest, res) => {
     res.status(400).json({ error: "invalid_payload" });
     return;
   }
-  const result = shareAlbum(req.userId!, param(req, "id"), parsed.data.username.trim());
+  const result = shareAlbum(
+    req.userId!,
+    param(req, "id"),
+    parsed.data.username.trim(),
+    parsed.data.photoIds,
+  );
   if (!result.ok) {
     const status = result.error === "album_not_found" ? 404 : 400;
     res.status(status).json({ error: result.error });
     return;
   }
   res.status(201).json({ shares: listAlbumShares(req.userId!, param(req, "id")) });
+});
+
+const updateSharePhotosSchema = z.object({ photoIds: z.array(z.string()) });
+
+albumsRouter.patch("/:id/shares/:userId", (req: AuthedRequest, res) => {
+  const parsed = updateSharePhotosSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "invalid_payload" });
+    return;
+  }
+  const ok = updateAlbumSharePhotos(
+    req.userId!,
+    param(req, "id"),
+    param(req, "userId"),
+    parsed.data.photoIds,
+  );
+  if (!ok) {
+    res.status(404).end();
+    return;
+  }
+  res.json({ shares: listAlbumShares(req.userId!, param(req, "id")) });
 });
 
 albumsRouter.delete("/:id/shares/:userId", (req: AuthedRequest, res) => {

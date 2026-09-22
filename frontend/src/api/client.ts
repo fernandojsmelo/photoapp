@@ -1,4 +1,4 @@
-import type { AlbumRecord, AlbumShare, PhotoEdits, PhotoRecord } from "../types/photo";
+import type { AlbumRecord, AlbumShare, PhotoEdits, PhotoRecord, PhotoShare } from "../types/photo";
 
 // Vazio = caminhos relativos à própria origem do frontend (ex.: "/api/...").
 // Em dev, o Vite proxya "/api" para o backend (ver vite.config.ts) — assim o
@@ -184,6 +184,26 @@ export async function enhancePhotoApi(photoId: string): Promise<Blob> {
   return res.blob();
 }
 
+/** Fotos avulsas (sem álbum) que outras pessoas compartilharam com você. */
+export function listSharedPhotosApi() {
+  return request<{ photos: PhotoRecord[] }>("/api/photos/shared");
+}
+
+export function sharePhotosApi(photoIds: string[], username: string) {
+  return request<{ ok: true }>("/api/photos/share", {
+    method: "POST",
+    body: JSON.stringify({ ids: photoIds, username }),
+  });
+}
+
+export function listPhotoSharesApi(photoId: string) {
+  return request<{ shares: PhotoShare[] }>(`/api/photos/${photoId}/shares`);
+}
+
+export function unsharePhotoApi(photoId: string, userId: string) {
+  return request<void>(`/api/photos/${photoId}/shares/${userId}`, { method: "DELETE" });
+}
+
 // --- Albums ---
 
 export function listAlbums() {
@@ -205,10 +225,17 @@ export function listAlbumSharesApi(albumId: string) {
   return request<{ shares: AlbumShare[] }>(`/api/albums/${albumId}/shares`);
 }
 
-export function shareAlbumApi(albumId: string, username: string) {
+export function shareAlbumApi(albumId: string, username: string, photoIds: string[]) {
   return request<{ shares: AlbumShare[] }>(`/api/albums/${albumId}/shares`, {
     method: "POST",
-    body: JSON.stringify({ username }),
+    body: JSON.stringify({ username, photoIds }),
+  });
+}
+
+export function updateAlbumSharePhotosApi(albumId: string, userId: string, photoIds: string[]) {
+  return request<{ shares: AlbumShare[] }>(`/api/albums/${albumId}/shares/${userId}`, {
+    method: "PATCH",
+    body: JSON.stringify({ photoIds }),
   });
 }
 

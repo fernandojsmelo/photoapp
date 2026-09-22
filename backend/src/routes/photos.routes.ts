@@ -15,9 +15,13 @@ import {
   getPhotoRow,
   getPhotoRowForViewing,
   listPhotos,
+  listPhotoShares,
+  listSharedPhotos,
   listTagCounts,
   searchPhotosBySimilarity,
+  sharePhotos,
   togglePhotoAlbum,
+  unsharePhoto,
   updatePhoto,
 } from "../services/photoService.js";
 import { albumBelongsToUser } from "../services/albumService.js";
@@ -48,6 +52,29 @@ photosRouter.get("/", (req: AuthedRequest, res) => {
 
 photosRouter.get("/tags", (req: AuthedRequest, res) => {
   res.json({ tags: listTagCounts(req.userId!) });
+});
+
+photosRouter.get("/shared", (req: AuthedRequest, res) => {
+  res.json({ photos: listSharedPhotos(req.userId!) });
+});
+
+const sharePhotosSchema = z.object({
+  ids: z.array(z.string()).min(1),
+  username: z.string().min(1),
+});
+
+photosRouter.post("/share", (req: AuthedRequest, res) => {
+  const parsed = sharePhotosSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "invalid_payload" });
+    return;
+  }
+  const result = sharePhotos(req.userId!, parsed.data.ids, parsed.data.username.trim());
+  if (!result.ok) {
+    res.status(400).json({ error: result.error });
+    return;
+  }
+  res.status(201).json({ ok: true });
 });
 
 photosRouter.get("/search", async (req: AuthedRequest, res) => {
@@ -172,6 +199,24 @@ photosRouter.patch("/:id", async (req: AuthedRequest, res) => {
     return;
   }
   res.json({ photo });
+});
+
+photosRouter.get("/:id/shares", (req: AuthedRequest, res) => {
+  const shares = listPhotoShares(req.userId!, param(req, "id"));
+  if (shares === null) {
+    res.status(404).end();
+    return;
+  }
+  res.json({ shares });
+});
+
+photosRouter.delete("/:id/shares/:userId", (req: AuthedRequest, res) => {
+  const ok = unsharePhoto(req.userId!, param(req, "id"), param(req, "userId"));
+  if (!ok) {
+    res.status(404).end();
+    return;
+  }
+  res.status(204).end();
 });
 
 photosRouter.post("/:id/albums/:albumId", (req: AuthedRequest, res) => {

@@ -31,8 +31,10 @@ export interface PhotoRecord {
   albumIds: string[];
   edits: PhotoEdits;
   exif: PhotoExif;
-  /** true quando a foto é de outra conta (vista via álbum compartilhado) — somente leitura. */
+  /** true quando a foto é de outra conta (vista via compartilhamento) — somente leitura. */
   readOnly: boolean;
+  /** username de quem compartilhou, presente só quando readOnly é true. */
+  sharedByUsername?: string;
 }
 
 export interface PhotoExif {
@@ -54,6 +56,13 @@ export interface AlbumRecord {
 }
 
 export interface AlbumShare {
+  userId: string;
+  username: string;
+  /** ids das fotos do álbum visíveis para esta pessoa. */
+  photoIds: string[];
+}
+
+export interface PhotoShare {
   userId: string;
   username: string;
 }

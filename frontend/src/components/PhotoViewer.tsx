@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { usePhotoBlob } from "../hooks/usePhotoBlob";
 import { useDisplayUrl } from "../hooks/useDisplayUrl";
 import { buildCssFilter, suggestTagsFromImage } from "../utils/imageProcessing";
 import { TagInput } from "./TagInput";
-import type { AlbumRecord, PhotoRecord } from "../types/photo";
+import { ApiError, listPhotoSharesApi, sharePhotosApi, unsharePhotoApi } from "../api/client";
+import type { AlbumRecord, PhotoRecord, PhotoShare } from "../types/photo";
 
 interface Props {
   photo: PhotoRecord;
@@ -15,7 +16,6 @@ interface Props {
   onToggleAlbum: (albumId: string) => void;
   onDelete: () => void;
   onOpenEditor: () => void;
-  sharedByUsername?: string;
 }
 
 function formatBytes(bytes: number): string {
@@ -34,7 +34,6 @@ export function PhotoViewer({
   onToggleAlbum,
   onDelete,
   onOpenEditor,
-  sharedByUsername,
 }: Props) {
   const blob = usePhotoBlob(photo.id);
   const url = useDisplayUrl(blob, photo.edits.crop, photo.edits.rotation);
@@ -42,6 +41,43 @@ export function PhotoViewer({
   const [suggested, setSuggested] = useState<string[] | null>(null);
   const [suggesting, setSuggesting] = useState(false);
   const readOnly = photo.readOnly;
+
+  const [shares, setShares] = useState<PhotoShare[]>([]);
+  const [shareUsername, setShareUsername] = useState("");
+  const [shareError, setShareError] = useState<string | null>(null);
+  const [sharing, setSharing] = useState(false);
+
+  useEffect(() => {
+    if (readOnly) return;
+    listPhotoSharesApi(photo.id).then(({ shares }) => setShares(shares));
+  }, [photo.id, readOnly]);
+
+  async function handleShare(e: React.FormEvent) {
+    e.preventDefault();
+    setShareError(null);
+    setSharing(true);
+    try {
+      await sharePhotosApi([photo.id], shareUsername.trim());
+      const { shares: updated } = await listPhotoSharesApi(photo.id);
+      setShares(updated);
+      setShareUsername("");
+    } catch (err) {
+      if (err instanceof ApiError && err.message === "user_not_found") {
+        setShareError("Não existe usuário com esse nome neste servidor.");
+      } else if (err instanceof ApiError && err.message === "cannot_share_with_self") {
+        setShareError("Você já é o dono desta foto.");
+      } else {
+        setShareError("Não foi possível compartilhar. Tente novamente.");
+      }
+    } finally {
+      setSharing(false);
+    }
+  }
+
+  async function handleUnshare(userId: string) {
+    await unsharePhotoApi(photo.id, userId);
+    setShares((prev) => prev.filter((s) => s.userId !== userId));
+  }
 
   async function handleSuggestTags() {
     if (!blob) return;
@@ -81,7 +117,7 @@ export function PhotoViewer({
           {readOnly ? (
             <div className="viewer-actions">
               <span className="muted small">
-                🔒 Compartilhado por {sharedByUsername ?? "outro usuário"} — somente visualização
+                🔒 Compartilhado por {photo.sharedByUsername ?? "outro usuário"} — somente visualização
               </span>
             </div>
           ) : (
@@ -156,6 +192,41 @@ export function PhotoViewer({
                   </label>
                 ))}
               </div>
+            </section>
+          )}
+
+          {!readOnly && (
+            <section className="viewer-section">
+              <h3>Compartilhada com</h3>
+              {shares.length === 0 ? (
+                <p className="muted small">Ninguém, por enquanto.</p>
+              ) : (
+                <ul className="users-list">
+                  {shares.map((s) => (
+                    <li key={s.userId} className="users-list-item">
+                      <span className="truncate">{s.username}</span>
+                      <button className="danger-link" onClick={() => handleUnshare(s.userId)}>
+                        Remover
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <form onSubmit={handleShare} className="ai-suggest-row" style={{ marginTop: 8 }} autoComplete="off">
+                <input
+                  type="text"
+                  placeholder="Compartilhar com usuário…"
+                  value={shareUsername}
+                  onChange={(e) => setShareUsername(e.target.value)}
+                  autoComplete="off"
+                  required
+                  minLength={1}
+                />
+                <button className="ghost-button" type="submit" disabled={sharing}>
+                  {sharing ? "…" : "Compartilhar"}
+                </button>
+              </form>
+              {shareError && <p className="auth-error">{shareError}</p>}
             </section>
           )}
 

@@ -68,6 +68,25 @@ db.exec(`
     created_at TEXT NOT NULL,
     PRIMARY KEY (album_id, shared_with_user_id)
   );
+
+  -- Quais fotos do álbum compartilhado ficam visíveis para cada pessoa —
+  -- compartilhar um álbum não libera automaticamente todas as suas fotos.
+  CREATE TABLE IF NOT EXISTS album_share_photos (
+    album_id TEXT NOT NULL,
+    shared_with_user_id TEXT NOT NULL,
+    photo_id TEXT NOT NULL REFERENCES photos(id) ON DELETE CASCADE,
+    PRIMARY KEY (album_id, shared_with_user_id, photo_id),
+    FOREIGN KEY (album_id, shared_with_user_id)
+      REFERENCES album_shares(album_id, shared_with_user_id) ON DELETE CASCADE
+  );
+
+  -- Compartilhamento de fotos avulsas, sem vínculo com nenhum álbum.
+  CREATE TABLE IF NOT EXISTS photo_shares (
+    photo_id TEXT NOT NULL REFERENCES photos(id) ON DELETE CASCADE,
+    shared_with_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (photo_id, shared_with_user_id)
+  );
 `);
 
 // Migração leve: bancos criados antes do recurso de busca semântica não têm

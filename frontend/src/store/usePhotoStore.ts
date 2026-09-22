@@ -6,7 +6,9 @@ import {
   deletePhotoApi,
   listAlbums,
   listPhotos,
+  listSharedPhotosApi,
   patchPhoto,
+  sharePhotosApi,
   togglePhotoAlbumApi,
   uploadPhotos,
 } from "../api/client";
@@ -20,6 +22,7 @@ interface ImportResult {
 interface PhotoStoreState {
   photos: PhotoRecord[];
   albums: AlbumRecord[];
+  sharedPhotos: PhotoRecord[];
   loading: boolean;
   initialized: boolean;
   init: () => Promise<void>;
@@ -42,23 +45,32 @@ interface PhotoStoreState {
    * pertencem a outra conta e nunca entram na listagem geral do usuário.
    */
   fetchAlbumPhotos: (albumId: string) => Promise<PhotoRecord[]>;
+  /** Recarrega as fotos avulsas (sem álbum) que outras pessoas compartilharam com você. */
+  refreshSharedPhotos: () => Promise<void>;
+  /** Compartilha fotos (que você é dono) com outro usuário, sem vínculo de álbum. */
+  sharePhotosMany: (photoIds: string[], username: string) => Promise<void>;
 }
 
 export const usePhotoStore = create<PhotoStoreState>((set, get) => ({
   photos: [],
   albums: [],
+  sharedPhotos: [],
   loading: false,
   initialized: false,
 
   async init() {
     if (get().initialized) return;
     set({ loading: true });
-    const [{ photos }, { albums }] = await Promise.all([listPhotos(), listAlbums()]);
-    set({ photos, albums, loading: false, initialized: true });
+    const [{ photos }, { albums }, { photos: sharedPhotos }] = await Promise.all([
+      listPhotos(),
+      listAlbums(),
+      listSharedPhotosApi(),
+    ]);
+    set({ photos, albums, sharedPhotos, loading: false, initialized: true });
   },
 
   reset() {
-    set({ photos: [], albums: [], loading: false, initialized: false });
+    set({ photos: [], albums: [], sharedPhotos: [], loading: false, initialized: false });
   },
 
   async importFiles(files) {
@@ -137,5 +149,14 @@ export const usePhotoStore = create<PhotoStoreState>((set, get) => ({
   async fetchAlbumPhotos(albumId) {
     const { photos } = await listPhotos({ albumId });
     return photos;
+  },
+
+  async refreshSharedPhotos() {
+    const { photos: sharedPhotos } = await listSharedPhotosApi();
+    set({ sharedPhotos });
+  },
+
+  async sharePhotosMany(photoIds, username) {
+    await sharePhotosApi(photoIds, username);
   },
 }));

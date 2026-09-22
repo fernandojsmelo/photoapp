@@ -9,6 +9,7 @@ interface Props {
   onAddTag: (tag: string) => void;
   onFavorite: () => void;
   onDelete: () => void;
+  onSharePhotos: (username: string) => void;
   onCancel: () => void;
 }
 
@@ -20,11 +21,13 @@ export function BulkActionBar({
   onAddTag,
   onFavorite,
   onDelete,
+  onSharePhotos,
   onCancel,
 }: Props) {
-  const [openMenu, setOpenMenu] = useState<"album" | "tag" | null>(null);
+  const [openMenu, setOpenMenu] = useState<"album" | "tag" | "share" | null>(null);
   const [newAlbumName, setNewAlbumName] = useState("");
   const [tagDraft, setTagDraft] = useState("");
+  const [shareUsername, setShareUsername] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   return (
@@ -91,6 +94,29 @@ export function BulkActionBar({
       <button className="ghost-button" onClick={onFavorite}>
         ★ Favoritar
       </button>
+
+      <div className="dropdown">
+        <button className="ghost-button" onClick={() => setOpenMenu(openMenu === "share" ? null : "share")}>
+          ⇱ Compartilhar
+        </button>
+        {openMenu === "share" && (
+          <div className="dropdown-menu" onMouseLeave={() => setOpenMenu(null)}>
+            <input
+              placeholder="Nome de usuário…"
+              autoFocus
+              value={shareUsername}
+              onChange={(e) => setShareUsername(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && shareUsername.trim()) {
+                  onSharePhotos(shareUsername.trim());
+                  setShareUsername("");
+                  setOpenMenu(null);
+                }
+              }}
+            />
+          </div>
+        )}
+      </div>
 
       {confirmDelete ? (
         <>
