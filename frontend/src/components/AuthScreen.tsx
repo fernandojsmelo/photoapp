@@ -43,7 +43,7 @@ export function AuthScreen({ mode, onAuthenticated }: Props) {
 
   return (
     <div className="auth-shell">
-      <form className="auth-card" onSubmit={handleSubmit}>
+      <form className="auth-card" onSubmit={handleSubmit} autoComplete="off">
         <div className="brand" style={{ justifyContent: "center", paddingBottom: 8 }}>
           <span className="brand-icon">◈</span>
           <span className="brand-name">PhotoApp</span>
@@ -61,8 +61,10 @@ export function AuthScreen({ mode, onAuthenticated }: Props) {
           <span>Usuário</span>
           <input
             type="text"
+            name={mode === "setup" ? "new-account-username" : "username"}
             value={username}
             onChange={(e) => setUsername(e.target.value)}
+            autoComplete={mode === "setup" ? "off" : "username"}
             autoFocus
             required
             minLength={3}
@@ -73,8 +75,10 @@ export function AuthScreen({ mode, onAuthenticated }: Props) {
           <span>Senha</span>
           <input
             type="password"
+            name={mode === "setup" ? "new-account-password" : "current-password"}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
+            autoComplete={mode === "setup" ? "new-password" : "current-password"}
             required
             minLength={8}
           />
@@ -85,8 +89,10 @@ export function AuthScreen({ mode, onAuthenticated }: Props) {
             <span>Confirmar senha</span>
             <input
               type="password"
+              name="new-account-password-confirm"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
+              autoComplete="new-password"
               required
               minLength={8}
             />

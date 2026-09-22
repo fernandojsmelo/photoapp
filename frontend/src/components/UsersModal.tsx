@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { createUserApi, deleteUserApi, listUsersApi, type AuthUser } from "../api/client";
+import { ApiError, createUserApi, deleteUserApi, listUsersApi, type AuthUser } from "../api/client";
 
 interface Props {
   currentUserId: string;
@@ -23,18 +23,32 @@ export function UsersModal({ currentUserId, onClose }: Props) {
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+
+    const trimmedUsername = username.trim();
+    const alreadyExists = users.some(
+      (u) => u.username.toLowerCase() === trimmedUsername.toLowerCase(),
+    );
+    if (alreadyExists) {
+      setError("Esse nome de usuário já está em uso. Escolha outro.");
+      return;
+    }
     if (password.length < 8) {
       setError("A senha precisa ter pelo menos 8 caracteres.");
       return;
     }
+
     setCreating(true);
     try {
-      const { user } = await createUserApi(username.trim(), password);
+      const { user } = await createUserApi(trimmedUsername, password);
       setUsers((prev) => [...prev, user]);
       setUsername("");
       setPassword("");
-    } catch {
-      setError("Não foi possível criar o usuário (nome já em uso?).");
+    } catch (err) {
+      if (err instanceof ApiError && err.message === "username_taken") {
+        setError("Esse nome de usuário já está em uso. Escolha outro.");
+      } else {
+        setError("Não foi possível criar o usuário. Tente novamente.");
+      }
     } finally {
       setCreating(false);
     }
@@ -81,28 +95,37 @@ export function UsersModal({ currentUserId, onClose }: Props) {
           </ul>
         )}
 
-        <form className="users-create-form" onSubmit={handleCreate}>
+        <form className="users-create-form" onSubmit={handleCreate} autoComplete="off">
           <h3 className="viewer-section-title">Criar novo usuário</h3>
           <input
             type="text"
+            name="new-account-username"
             placeholder="Nome de usuário"
             value={username}
             onChange={(e) => setUsername(e.target.value)}
+            autoComplete="off"
             required
             minLength={3}
           />
           <input
             type="password"
+            name="new-account-password"
             placeholder="Senha (mín. 8 caracteres)"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
+            autoComplete="new-password"
             required
             minLength={8}
           />
           {error && <p className="auth-error">{error}</p>}
-          <button className="primary-button" type="submit" disabled={creating}>
-            {creating ? "Criando…" : "Criar usuário"}
-          </button>
+          <div className="modal-actions">
+            <button type="button" className="danger-button" onClick={onClose} disabled={creating}>
+              Cancelar
+            </button>
+            <button className="primary-button" type="submit" disabled={creating}>
+              {creating ? "Criando…" : "Criar usuário"}
+            </button>
+          </div>
         </form>
       </div>
     </div>
