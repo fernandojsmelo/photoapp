@@ -22,6 +22,7 @@ import {
 } from "../services/photoService.js";
 import { albumBelongsToUser } from "../services/albumService.js";
 import { embedText } from "../services/embeddingService.js";
+import { upscaleImageFile } from "../services/upscaleService.js";
 
 export const photosRouter = Router();
 photosRouter.use(requireAuth);
@@ -101,6 +102,28 @@ photosRouter.get("/:id/file", (req: AuthedRequest, res) => {
   }
   res.type(row.mime_type);
   res.sendFile(filePath);
+});
+
+photosRouter.post("/:id/enhance", async (req: AuthedRequest, res) => {
+  const row = getPhotoRow(req.userId!, param(req, "id"));
+  if (!row) {
+    res.status(404).end();
+    return;
+  }
+  const filePath = getOriginalPath(row.id, row.original_ext);
+  if (!fs.existsSync(filePath)) {
+    res.status(404).end();
+    return;
+  }
+  try {
+    const enhanced = await upscaleImageFile(filePath);
+    res.type("image/png");
+    res.setHeader("Content-Disposition", `attachment; filename="aprimorada-${row.file_name}.png"`);
+    res.send(enhanced);
+  } catch (err) {
+    console.error("Falha ao aprimorar foto", row.id, err);
+    res.status(503).json({ error: "enhance_unavailable" });
+  }
 });
 
 photosRouter.get("/:id/thumbnail", (req: AuthedRequest, res) => {

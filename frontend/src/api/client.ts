@@ -171,6 +171,19 @@ export async function fetchPhotoBlob(photoId: string): Promise<Blob> {
   return res.blob();
 }
 
+/**
+ * Aprimora a foto com um modelo de IA real (super-resolução local, sem
+ * serviço externo) rodando no backend. Pode levar alguns segundos.
+ */
+export async function enhancePhotoApi(photoId: string): Promise<Blob> {
+  const res = await fetch(`${API_BASE}/api/photos/${photoId}/enhance`, {
+    method: "POST",
+    credentials: "include",
+  });
+  if (!res.ok) throw new ApiError(res.status, "Falha ao aprimorar a foto");
+  return res.blob();
+}
+
 // --- Albums ---
 
 export function listAlbums() {

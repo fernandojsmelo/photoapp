@@ -2,12 +2,12 @@ import { useEffect, useMemo, useState } from "react";
 import { usePhotoBlob } from "../hooks/usePhotoBlob";
 import { useDisplayUrl } from "../hooks/useDisplayUrl";
 import { CropOverlay } from "./CropOverlay";
+import { enhancePhotoApi } from "../api/client";
 import {
   PRESET_LABELS,
   buildCssFilter,
   renderEditedImage,
   rotateOnlyBlob,
-  suggestAutoEnhanceEdits,
 } from "../utils/imageProcessing";
 import { DEFAULT_EDITS, type CropRect, type PhotoEdits, type PhotoRecord, type PresetId } from "../types/photo";
 
@@ -23,6 +23,7 @@ const FULL_CROP: CropRect = { x: 0, y: 0, width: 1, height: 1 };
 export function PhotoEditor({ photo, onSave, onClose }: Props) {
   const [edits, setEdits] = useState<PhotoEdits>(photo.edits);
   const [enhancing, setEnhancing] = useState(false);
+  const [enhanceError, setEnhanceError] = useState(false);
   const [cropMode, setCropMode] = useState(false);
   const [workingCrop, setWorkingCrop] = useState<CropRect>(photo.edits.crop ?? FULL_CROP);
   const [rotatedUrl, setRotatedUrl] = useState<string | undefined>(undefined);
@@ -55,11 +56,18 @@ export function PhotoEditor({ photo, onSave, onClose }: Props) {
   }
 
   async function handleAutoEnhance() {
-    if (!blob) return;
     setEnhancing(true);
+    setEnhanceError(false);
     try {
-      const suggestion = await suggestAutoEnhanceEdits(blob);
-      setEdits((prev) => ({ ...prev, ...suggestion }));
+      const enhancedBlob = await enhancePhotoApi(photo.id);
+      const downloadUrl = URL.createObjectURL(enhancedBlob);
+      const a = document.createElement("a");
+      a.href = downloadUrl;
+      a.download = `aprimorada-${photo.fileName}.png`;
+      a.click();
+      URL.revokeObjectURL(downloadUrl);
+    } catch {
+      setEnhanceError(true);
     } finally {
       setEnhancing(false);
     }
@@ -146,13 +154,18 @@ export function PhotoEditor({ photo, onSave, onClose }: Props) {
             </>
           ) : (
             <>
-              <button className="ai-button" onClick={handleAutoEnhance} disabled={enhancing || !blob}>
-                {enhancing ? "Analisando…" : "✨ Aprimorar com IA"}
+              <button className="ai-button" onClick={handleAutoEnhance} disabled={enhancing}>
+                {enhancing ? "Aprimorando… (pode levar alguns segundos)" : "✨ Aprimorar com IA"}
               </button>
               <p className="muted tiny" style={{ marginTop: -8 }}>
-                Análise local de histograma (sem enviar a foto) — placeholder até o serviço de
-                IA do backend (ver PRD).
+                Modelo de super-resolução (Swin2SR) rodando no seu servidor — a foto não sai
+                dele. Gera uma versão em dobro de resolução e baixa automaticamente.
               </p>
+              {enhanceError && (
+                <p className="auth-error" style={{ marginTop: -8 }}>
+                  Não foi possível aprimorar agora. Tente de novo em instantes.
+                </p>
+              )}
 
               <div className="preset-row">
                 {PRESET_ORDER.map((preset) => (
