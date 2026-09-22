@@ -1,0 +1,7 @@
+{$DOMAIN} {
+	# Caddy obtém e renova o certificado Let's Encrypt automaticamente para
+	# {$DOMAIN} — nada a configurar além da variável de ambiente DOMAIN.
+	reverse_proxy photoapp:4000
+
+	encode gzip
+}

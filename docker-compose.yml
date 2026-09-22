@@ -13,5 +13,28 @@ services:
       - photoapp_data:/app/data
     restart: unless-stopped
 
+  # Reverse proxy com HTTPS automático (Let's Encrypt). Só sobe com
+  # `docker compose --profile https up -d` — veja README.md para o passo a
+  # passo (domínio/DDNS, portas 80+443 encaminhadas no roteador, DOMAIN no
+  # .env). Sem esse profile, o app continua acessível sem HTTPS em
+  # http://localhost:${PORT:-4000} como já era.
+  caddy:
+    image: caddy:2-alpine
+    profiles: ["https"]
+    depends_on:
+      - photoapp
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: "${DOMAIN:?Defina DOMAIN no .env - ex. seunome.duckdns.org - para usar o profile https}"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    restart: unless-stopped
+
 volumes:
   photoapp_data:
+  caddy_data:
+  caddy_config:
