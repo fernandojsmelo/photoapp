@@ -1,4 +1,11 @@
-import type { AlbumRecord, AlbumShare, PhotoEdits, PhotoRecord, PhotoShare } from "../types/photo";
+import type {
+  AlbumRecord,
+  AlbumShare,
+  OwnedPhotoShare,
+  PhotoEdits,
+  PhotoRecord,
+  PhotoShare,
+} from "../types/photo";
 
 // Vazio = caminhos relativos à própria origem do frontend (ex.: "/api/...").
 // Em dev, o Vite proxya "/api" para o backend (ver vite.config.ts) — assim o
@@ -198,6 +205,18 @@ export function sharePhotosApi(photoIds: string[], username: string) {
 
 export function listPhotoSharesApi(photoId: string) {
   return request<{ shares: PhotoShare[] }>(`/api/photos/${photoId}/shares`);
+}
+
+/** Todos os compartilhamentos avulsos que você fez — base da tela de gerenciamento em lote. */
+export function listOwnedPhotoSharesApi() {
+  return request<{ shares: OwnedPhotoShare[] }>("/api/photos/shares");
+}
+
+export function revokePhotoSharesApi(entries: Array<{ photoId: string; userId: string }>) {
+  return request<void>("/api/photos/shares/revoke", {
+    method: "POST",
+    body: JSON.stringify({ entries }),
+  });
 }
 
 export function unsharePhotoApi(photoId: string, userId: string) {

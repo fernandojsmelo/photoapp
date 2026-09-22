@@ -67,6 +67,14 @@ export interface PhotoShare {
   username: string;
 }
 
+/** Uma linha (foto, pessoa) de compartilhamento avulso feito pelo usuário — para a tela de gerenciamento em lote. */
+export interface OwnedPhotoShare {
+  photoId: string;
+  fileName: string;
+  userId: string;
+  username: string;
+}
+
 export const DEFAULT_EDITS: PhotoEdits = {
   brightness: 0,
   contrast: 0,

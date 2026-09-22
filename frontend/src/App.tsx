@@ -9,6 +9,7 @@ import { BulkActionBar } from "./components/BulkActionBar";
 import { AuthScreen } from "./components/AuthScreen";
 import { UsersModal } from "./components/UsersModal";
 import { ShareAlbumModal } from "./components/ShareAlbumModal";
+import { ManageSharesModal } from "./components/ManageSharesModal";
 import { getAuthStatus, getMe, logout, searchPhotosSemantic, type AuthUser } from "./api/client";
 import { usePhotoStore } from "./store/usePhotoStore";
 import type { LibraryView } from "./types/view";
@@ -118,6 +119,7 @@ function PhotoLibrary({ user, onLogout }: { user: AuthUser; onLogout: () => void
   const [editingPhotoId, setEditingPhotoId] = useState<string | null>(null);
   const [showAlbumModal, setShowAlbumModal] = useState(false);
   const [showUsersModal, setShowUsersModal] = useState(false);
+  const [showManageSharesModal, setShowManageSharesModal] = useState(false);
   const [shareAlbumTarget, setShareAlbumTarget] = useState<AlbumRecord | null>(null);
   const [albumViewPhotos, setAlbumViewPhotos] = useState<PhotoRecord[] | null>(null);
   const [albumViewLoading, setAlbumViewLoading] = useState(false);
@@ -296,6 +298,7 @@ function PhotoLibrary({ user, onLogout }: { user: AuthUser; onLogout: () => void
         isAdmin={user.isAdmin}
         onLogout={handleLogout}
         onManageUsers={() => setShowUsersModal(true)}
+        onManageShares={() => setShowManageSharesModal(true)}
         onShareAlbum={setShareAlbumTarget}
       />
 
@@ -421,6 +424,10 @@ function PhotoLibrary({ user, onLogout }: { user: AuthUser; onLogout: () => void
 
       {showUsersModal && (
         <UsersModal currentUserId={user.id} onClose={() => setShowUsersModal(false)} />
+      )}
+
+      {showManageSharesModal && (
+        <ManageSharesModal onClose={() => setShowManageSharesModal(false)} />
       )}
 
       {shareAlbumTarget && (

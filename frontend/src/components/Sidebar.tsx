@@ -16,6 +16,7 @@ interface Props {
   isAdmin: boolean;
   onLogout: () => void;
   onManageUsers: () => void;
+  onManageShares: () => void;
   onShareAlbum: (album: AlbumRecord) => void;
 }
 
@@ -34,6 +35,7 @@ export function Sidebar({
   isAdmin,
   onLogout,
   onManageUsers,
+  onManageShares,
   onShareAlbum,
 }: Props) {
   const activeKey = viewKey(currentView);
@@ -137,6 +139,12 @@ export function Sidebar({
           ))}
         </div>
       )}
+
+      <div className="nav-section">
+        <button className="nav-item" onClick={onManageShares}>
+          <span>🔗 Compartilhamentos</span>
+        </button>
+      </div>
 
       {tagCounts.length > 0 && (
         <div className="nav-section">

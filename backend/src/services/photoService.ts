@@ -4,7 +4,13 @@ import sharp, { type Sharp } from "sharp";
 import { db } from "../db/client.js";
 import { deletePhotoFiles, getOriginalPath, saveOriginal, saveThumbnail } from "../storage/fileStorage.js";
 import { sha256 } from "../utils/hash.js";
-import { DEFAULT_EDITS, type PhotoDTO, type PhotoEdits, type PhotoShareDTO } from "../types/index.js";
+import {
+  DEFAULT_EDITS,
+  type OwnedPhotoShareDTO,
+  type PhotoDTO,
+  type PhotoEdits,
+  type PhotoShareDTO,
+} from "../types/index.js";
 import { bufferToEmbedding, cosineSimilarity, embedImageFile, embeddingToBuffer } from "./embeddingService.js";
 import { resolveAlbumAccess } from "./albumService.js";
 
@@ -598,4 +604,43 @@ export function listPhotoShares(ownerId: string, photoId: string): PhotoShareDTO
     )
     .all(photoId) as Array<{ user_id: string; username: string }>;
   return rows.map((r) => ({ userId: r.user_id, username: r.username }));
+}
+
+/**
+ * Todos os compartilhamentos avulsos (sem álbum) que o próprio usuário fez,
+ * uma linha por (foto, pessoa) — base para a tela de gerenciamento em lote.
+ */
+export function listOwnedPhotoShares(ownerId: string): OwnedPhotoShareDTO[] {
+  const rows = db
+    .prepare(
+      `SELECT p.id as photo_id, p.file_name, u.id as user_id, u.username
+       FROM photo_shares ps
+       JOIN photos p ON p.id = ps.photo_id
+       JOIN users u ON u.id = ps.shared_with_user_id
+       WHERE p.user_id = ?
+       ORDER BY u.username ASC, p.imported_at DESC`,
+    )
+    .all(ownerId) as Array<{ photo_id: string; file_name: string; user_id: string; username: string }>;
+  return rows.map((r) => ({
+    photoId: r.photo_id,
+    fileName: r.file_name,
+    userId: r.user_id,
+    username: r.username,
+  }));
+}
+
+/** Revoga vários compartilhamentos avulsos de uma vez (pares foto/pessoa). */
+export function unsharePhotosBulk(
+  ownerId: string,
+  entries: Array<{ photoId: string; userId: string }>,
+): void {
+  const del = db.prepare(
+    `DELETE FROM photo_shares
+     WHERE photo_id = ? AND shared_with_user_id = ?
+       AND EXISTS (SELECT 1 FROM photos p WHERE p.id = photo_shares.photo_id AND p.user_id = ?)`,
+  );
+  const tx = db.transaction(() => {
+    for (const entry of entries) del.run(entry.photoId, entry.userId, ownerId);
+  });
+  tx();
 }

@@ -14,6 +14,7 @@ import {
   deletePhoto,
   getPhotoRow,
   getPhotoRowForViewing,
+  listOwnedPhotoShares,
   listPhotos,
   listPhotoShares,
   listSharedPhotos,
@@ -22,6 +23,7 @@ import {
   sharePhotos,
   togglePhotoAlbum,
   unsharePhoto,
+  unsharePhotosBulk,
   updatePhoto,
 } from "../services/photoService.js";
 import { albumBelongsToUser } from "../services/albumService.js";
@@ -75,6 +77,25 @@ photosRouter.post("/share", (req: AuthedRequest, res) => {
     return;
   }
   res.status(201).json({ ok: true });
+});
+
+/** Todos os compartilhamentos avulsos que o próprio usuário fez — base da tela de gerenciamento. */
+photosRouter.get("/shares", (req: AuthedRequest, res) => {
+  res.json({ shares: listOwnedPhotoShares(req.userId!) });
+});
+
+const revokeSharesSchema = z.object({
+  entries: z.array(z.object({ photoId: z.string(), userId: z.string() })).min(1),
+});
+
+photosRouter.post("/shares/revoke", (req: AuthedRequest, res) => {
+  const parsed = revokeSharesSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "invalid_payload" });
+    return;
+  }
+  unsharePhotosBulk(req.userId!, parsed.data.entries);
+  res.status(204).end();
 });
 
 photosRouter.get("/search", async (req: AuthedRequest, res) => {

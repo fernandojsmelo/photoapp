@@ -77,6 +77,14 @@ export interface PhotoShareDTO {
   username: string;
 }
 
+/** Uma linha (foto, pessoa) de compartilhamento avulso feito pelo usuário — para a tela de gerenciamento em lote. */
+export interface OwnedPhotoShareDTO {
+  photoId: string;
+  fileName: string;
+  userId: string;
+  username: string;
+}
+
 export interface UserDTO {
   id: string;
   username: string;
