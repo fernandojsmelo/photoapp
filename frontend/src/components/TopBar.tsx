@@ -9,6 +9,7 @@ interface Props {
   title: string;
   selectionMode: boolean;
   onToggleSelectionMode: () => void;
+  selectionDisabled?: boolean;
 }
 
 export function TopBar({
@@ -20,6 +21,7 @@ export function TopBar({
   title,
   selectionMode,
   onToggleSelectionMode,
+  selectionDisabled = false,
 }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -51,9 +53,11 @@ export function TopBar({
           e.target.value = "";
         }}
       />
-      <button className={`ghost-button ${selectionMode ? "active-toggle" : ""}`} onClick={onToggleSelectionMode}>
-        {selectionMode ? "Concluir seleção" : "Selecionar"}
-      </button>
+      {!selectionDisabled && (
+        <button className={`ghost-button ${selectionMode ? "active-toggle" : ""}`} onClick={onToggleSelectionMode}>
+          {selectionMode ? "Concluir seleção" : "Selecionar"}
+        </button>
+      )}
       <button className="primary-button" onClick={() => inputRef.current?.click()}>
         + Importar fotos
       </button>

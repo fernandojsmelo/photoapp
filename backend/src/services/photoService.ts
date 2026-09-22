@@ -6,6 +6,7 @@ import { deletePhotoFiles, getOriginalPath, saveOriginal, saveThumbnail } from "
 import { sha256 } from "../utils/hash.js";
 import { DEFAULT_EDITS, type PhotoDTO, type PhotoEdits } from "../types/index.js";
 import { bufferToEmbedding, cosineSimilarity, embedImageFile, embeddingToBuffer } from "./embeddingService.js";
+import { resolveAlbumAccess } from "./albumService.js";
 
 interface PhotoRow {
   id: string;
@@ -137,7 +138,7 @@ function albumIdsForPhotos(photoIds: string[]): Map<string, string[]> {
   return map;
 }
 
-function toDTO(row: PhotoRow, tags: string[], albumIds: string[]): PhotoDTO {
+function toDTO(row: PhotoRow, tags: string[], albumIds: string[], requestingUserId: string): PhotoDTO {
   return {
     id: row.id,
     fileName: row.file_name,
@@ -157,19 +158,35 @@ function toDTO(row: PhotoRow, tags: string[], albumIds: string[]): PhotoDTO {
       latitude: row.exif_latitude ?? undefined,
       longitude: row.exif_longitude ?? undefined,
     },
+    readOnly: row.user_id !== requestingUserId,
   };
 }
 
-function rowsToDTOs(rows: PhotoRow[]): PhotoDTO[] {
+function rowsToDTOs(rows: PhotoRow[], requestingUserId: string): PhotoDTO[] {
   const ids = rows.map((r) => r.id);
   const tagsMap = tagsForPhotos(ids);
   const albumsMap = albumIdsForPhotos(ids);
-  return rows.map((row) => toDTO(row, tagsMap.get(row.id) ?? [], albumsMap.get(row.id) ?? []));
+  return rows.map((row) =>
+    toDTO(row, tagsMap.get(row.id) ?? [], albumsMap.get(row.id) ?? [], requestingUserId),
+  );
 }
 
+/**
+ * Lista fotos visíveis para `userId`. Quando `filters.albumId` aponta para um
+ * álbum compartilhado com ele (não é o dono), resolve o dono real do álbum e
+ * mostra as fotos dele naquele álbum — a listagem geral (sem albumId) nunca
+ * mistura fotos de outra conta.
+ */
 export function listPhotos(userId: string, filters: PhotoListFilters): PhotoDTO[] {
+  let ownerScope = userId;
+  if (filters.albumId) {
+    const access = resolveAlbumAccess(userId, filters.albumId);
+    if (!access) return [];
+    ownerScope = access.ownerId;
+  }
+
   const clauses = ["p.user_id = ?"];
-  const params: unknown[] = [userId];
+  const params: unknown[] = [ownerScope];
 
   let joins = "";
   if (filters.albumId) {
@@ -194,7 +211,7 @@ export function listPhotos(userId: string, filters: PhotoListFilters): PhotoDTO[
 
   const sql = `SELECT DISTINCT p.* FROM photos p${joins} WHERE ${clauses.join(" AND ")} ORDER BY p.imported_at DESC`;
   const rows = db.prepare(sql).all(...params) as PhotoRow[];
-  return rowsToDTOs(rows);
+  return rowsToDTOs(rows, userId);
 }
 
 export function getPhotoDTO(userId: string, photoId: string): PhotoDTO | null {
@@ -202,7 +219,36 @@ export function getPhotoDTO(userId: string, photoId: string): PhotoDTO | null {
     | PhotoRow
     | undefined;
   if (!row) return null;
-  return toDTO(row, tagsForPhotos([row.id]).get(row.id) ?? [], albumIdsForPhotos([row.id]).get(row.id) ?? []);
+  return toDTO(
+    row,
+    tagsForPhotos([row.id]).get(row.id) ?? [],
+    albumIdsForPhotos([row.id]).get(row.id) ?? [],
+    userId,
+  );
+}
+
+/**
+ * Busca uma foto para leitura (servir arquivo/thumbnail), permitindo acesso
+ * se o requisitante é o dono OU a foto está em algum álbum compartilhado com
+ * ele. Ações de escrita continuam usando getPhotoRow (só dono).
+ */
+export function getPhotoRowForViewing(requestingUserId: string, photoId: string): PhotoRow | null {
+  const own = db.prepare("SELECT * FROM photos WHERE id = ? AND user_id = ?").get(
+    photoId,
+    requestingUserId,
+  ) as PhotoRow | undefined;
+  if (own) return own;
+
+  const viaShare = db
+    .prepare(
+      `SELECT p.* FROM photos p
+       JOIN photo_albums pa ON pa.photo_id = p.id
+       JOIN album_shares s ON s.album_id = pa.album_id
+       WHERE p.id = ? AND s.shared_with_user_id = ?
+       LIMIT 1`,
+    )
+    .get(photoId, requestingUserId) as PhotoRow | undefined;
+  return viaShare ?? null;
 }
 
 export function getPhotoRow(userId: string, photoId: string): PhotoRow | null {
@@ -306,7 +352,7 @@ export function searchPhotosBySimilarity(
     .sort((a, b) => b.score - a.score)
     .slice(0, limit);
 
-  const dtos = rowsToDTOs(scored.map((s) => s.row));
+  const dtos = rowsToDTOs(scored.map((s) => s.row), userId);
   return dtos.map((dto, i) => ({ ...dto, score: scored[i].score }));
 }
 
@@ -457,9 +503,4 @@ export function listTagCounts(userId: string): Array<{ tag: string; count: numbe
     )
     .all(userId) as Array<{ tag: string; count: number }>;
   return rows;
-}
-
-export function getOriginalExt(userId: string, photoId: string): string | null {
-  const row = getPhotoRow(userId, photoId);
-  return row?.original_ext ?? null;
 }

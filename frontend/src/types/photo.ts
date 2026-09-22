@@ -31,6 +31,8 @@ export interface PhotoRecord {
   albumIds: string[];
   edits: PhotoEdits;
   exif: PhotoExif;
+  /** true quando a foto é de outra conta (vista via álbum compartilhado) — somente leitura. */
+  readOnly: boolean;
 }
 
 export interface PhotoExif {
@@ -44,6 +46,16 @@ export interface AlbumRecord {
   id: string;
   name: string;
   createdAt: string;
+  /** false quando o álbum foi compartilhado com você (não é o dono). */
+  isOwner: boolean;
+  /** username de quem compartilhou, presente só quando isOwner é false. */
+  ownerUsername?: string;
+  photoCount: number;
+}
+
+export interface AlbumShare {
+  userId: string;
+  username: string;
 }
 
 export const DEFAULT_EDITS: PhotoEdits = {

@@ -48,12 +48,24 @@ export interface PhotoDTO {
   edits: PhotoEdits;
   exif: PhotoExif;
   sizeBytes: number;
+  /** true quando a foto pertence a outro usuário (vista via álbum compartilhado) — somente leitura. */
+  readOnly: boolean;
 }
 
 export interface AlbumDTO {
   id: string;
   name: string;
   createdAt: string;
+  /** false quando o álbum foi compartilhado com o usuário atual (não é o dono). */
+  isOwner: boolean;
+  /** username de quem compartilhou, presente só quando isOwner é false. */
+  ownerUsername?: string;
+  photoCount: number;
+}
+
+export interface AlbumShareDTO {
+  userId: string;
+  username: string;
 }
 
 export interface UserDTO {

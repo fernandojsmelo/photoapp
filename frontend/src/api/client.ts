@@ -1,4 +1,4 @@
-import type { AlbumRecord, PhotoEdits, PhotoRecord } from "../types/photo";
+import type { AlbumRecord, AlbumShare, PhotoEdits, PhotoRecord } from "../types/photo";
 
 // Vazio = caminhos relativos à própria origem do frontend (ex.: "/api/...").
 // Em dev, o Vite proxya "/api" para o backend (ver vite.config.ts) — assim o
@@ -199,6 +199,21 @@ export function createAlbumApi(name: string) {
 
 export function deleteAlbumApi(id: string) {
   return request<void>(`/api/albums/${id}`, { method: "DELETE" });
+}
+
+export function listAlbumSharesApi(albumId: string) {
+  return request<{ shares: AlbumShare[] }>(`/api/albums/${albumId}/shares`);
+}
+
+export function shareAlbumApi(albumId: string, username: string) {
+  return request<{ shares: AlbumShare[] }>(`/api/albums/${albumId}/shares`, {
+    method: "POST",
+    body: JSON.stringify({ username }),
+  });
+}
+
+export function unshareAlbumApi(albumId: string, userId: string) {
+  return request<void>(`/api/albums/${albumId}/shares/${userId}`, { method: "DELETE" });
 }
 
 // --- Users (gerenciamento, só admin) ---

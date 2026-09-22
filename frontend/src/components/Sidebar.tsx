@@ -15,6 +15,7 @@ interface Props {
   isAdmin: boolean;
   onLogout: () => void;
   onManageUsers: () => void;
+  onShareAlbum: (album: AlbumRecord) => void;
 }
 
 export function Sidebar({
@@ -31,8 +32,11 @@ export function Sidebar({
   isAdmin,
   onLogout,
   onManageUsers,
+  onShareAlbum,
 }: Props) {
   const activeKey = viewKey(currentView);
+  const ownAlbums = albums.filter((a) => a.isOwner);
+  const sharedAlbums = albums.filter((a) => !a.isOwner);
 
   return (
     <aside className="sidebar">
@@ -65,8 +69,8 @@ export function Sidebar({
             +
           </button>
         </div>
-        {albums.length === 0 && <p className="muted small">Nenhum álbum ainda</p>}
-        {albums.map((album) => (
+        {ownAlbums.length === 0 && <p className="muted small">Nenhum álbum ainda</p>}
+        {ownAlbums.map((album) => (
           <div
             key={album.id}
             className={`nav-item album-item ${
@@ -82,6 +86,16 @@ export function Sidebar({
             </button>
             <button
               className="icon-button subtle"
+              title="Compartilhar álbum"
+              onClick={(e) => {
+                e.stopPropagation();
+                onShareAlbum(album);
+              }}
+            >
+              ⇱
+            </button>
+            <button
+              className="icon-button subtle"
               title="Excluir álbum"
               onClick={(e) => {
                 e.stopPropagation();
@@ -93,6 +107,25 @@ export function Sidebar({
           </div>
         ))}
       </div>
+
+      {sharedAlbums.length > 0 && (
+        <div className="nav-section">
+          <div className="nav-heading">
+            <span>Compartilhados comigo</span>
+          </div>
+          {sharedAlbums.map((album) => (
+            <button
+              key={album.id}
+              className={`nav-item ${activeKey === `album:${album.id}` ? "active" : ""}`}
+              onClick={() => onChangeView({ type: "album", albumId: album.id })}
+              title={`Compartilhado por ${album.ownerUsername}`}
+            >
+              <span className="truncate">{album.name}</span>
+              <span className="count">{album.photoCount}</span>
+            </button>
+          ))}
+        </div>
+      )}
 
       {tagCounts.length > 0 && (
         <div className="nav-section">

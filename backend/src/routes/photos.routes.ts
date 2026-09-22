@@ -12,8 +12,8 @@ import {
   bulkSetFavorite,
   createPhoto,
   deletePhoto,
-  getOriginalExt,
   getPhotoRow,
+  getPhotoRowForViewing,
   listPhotos,
   listTagCounts,
   searchPhotosBySimilarity,
@@ -90,7 +90,7 @@ photosRouter.post("/", upload.array("files", 30), async (req: AuthedRequest, res
 });
 
 photosRouter.get("/:id/file", (req: AuthedRequest, res) => {
-  const row = getPhotoRow(req.userId!, param(req, "id"));
+  const row = getPhotoRowForViewing(req.userId!, param(req, "id"));
   if (!row) {
     res.status(404).end();
     return;
@@ -128,8 +128,8 @@ photosRouter.post("/:id/enhance", async (req: AuthedRequest, res) => {
 
 photosRouter.get("/:id/thumbnail", (req: AuthedRequest, res) => {
   const photoId = param(req, "id");
-  const ext = getOriginalExt(req.userId!, photoId);
-  if (!ext) {
+  const row = getPhotoRowForViewing(req.userId!, photoId);
+  if (!row) {
     res.status(404).end();
     return;
   }

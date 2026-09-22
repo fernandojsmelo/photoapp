@@ -61,6 +61,13 @@ db.exec(`
     album_id TEXT NOT NULL REFERENCES albums(id) ON DELETE CASCADE,
     PRIMARY KEY (photo_id, album_id)
   );
+
+  CREATE TABLE IF NOT EXISTS album_shares (
+    album_id TEXT NOT NULL REFERENCES albums(id) ON DELETE CASCADE,
+    shared_with_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (album_id, shared_with_user_id)
+  );
 `);
 
 // Migração leve: bancos criados antes do recurso de busca semântica não têm

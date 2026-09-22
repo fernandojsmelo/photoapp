@@ -8,10 +8,11 @@ import { AlbumModal } from "./components/AlbumModal";
 import { BulkActionBar } from "./components/BulkActionBar";
 import { AuthScreen } from "./components/AuthScreen";
 import { UsersModal } from "./components/UsersModal";
+import { ShareAlbumModal } from "./components/ShareAlbumModal";
 import { getAuthStatus, getMe, logout, searchPhotosSemantic, type AuthUser } from "./api/client";
 import { usePhotoStore } from "./store/usePhotoStore";
 import type { LibraryView } from "./types/view";
-import type { PhotoRecord } from "./types/photo";
+import type { AlbumRecord, PhotoRecord } from "./types/photo";
 import "./App.css";
 
 type AuthState =
@@ -104,6 +105,7 @@ function PhotoLibrary({ user, onLogout }: { user: AuthUser; onLogout: () => void
     addTagToPhotos,
     setFavoriteMany,
     removePhotosMany,
+    fetchAlbumPhotos,
   } = usePhotoStore();
 
   const [view, setView] = useState<LibraryView>({ type: "all" });
@@ -112,6 +114,9 @@ function PhotoLibrary({ user, onLogout }: { user: AuthUser; onLogout: () => void
   const [editingPhotoId, setEditingPhotoId] = useState<string | null>(null);
   const [showAlbumModal, setShowAlbumModal] = useState(false);
   const [showUsersModal, setShowUsersModal] = useState(false);
+  const [shareAlbumTarget, setShareAlbumTarget] = useState<AlbumRecord | null>(null);
+  const [albumViewPhotos, setAlbumViewPhotos] = useState<PhotoRecord[] | null>(null);
+  const [albumViewLoading, setAlbumViewLoading] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [selectionMode, setSelectionMode] = useState(false);
@@ -137,12 +142,31 @@ function PhotoLibrary({ user, onLogout }: { user: AuthUser; onLogout: () => void
     return () => clearTimeout(timer);
   }, [feedback]);
 
+  useEffect(() => {
+    if (view.type !== "album") {
+      setAlbumViewPhotos(null);
+      return;
+    }
+    let cancelled = false;
+    setAlbumViewLoading(true);
+    fetchAlbumPhotos(view.albumId).then((result) => {
+      if (!cancelled) {
+        setAlbumViewPhotos(result);
+        setAlbumViewLoading(false);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view.type === "album" ? view.albumId : null]);
+
   const scoped = useMemo(() => {
     if (view.type === "favorites") return photos.filter((p) => p.favorite);
-    if (view.type === "album") return photos.filter((p) => p.albumIds.includes(view.albumId));
+    if (view.type === "album") return albumViewPhotos ?? [];
     if (view.type === "tag") return photos.filter((p) => p.tags.includes(view.tag));
     return photos;
-  }, [photos, view]);
+  }, [photos, view, albumViewPhotos]);
 
   const filteredPhotos = useMemo(() => {
     if (semanticResults) {
@@ -188,9 +212,18 @@ function PhotoLibrary({ user, onLogout }: { user: AuthUser; onLogout: () => void
       .sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag));
   }, [photos]);
 
-  const selectedPhoto = photos.find((p) => p.id === selectedPhotoId) ?? null;
+  const selectedPhoto =
+    filteredPhotos.find((p) => p.id === selectedPhotoId) ??
+    photos.find((p) => p.id === selectedPhotoId) ??
+    null;
   const editingPhoto = photos.find((p) => p.id === editingPhotoId) ?? null;
   const currentAlbum = view.type === "album" ? albums.find((a) => a.id === view.albumId) : undefined;
+  const isReadOnlyAlbumView = currentAlbum ? !currentAlbum.isOwner : false;
+
+  useEffect(() => {
+    if (isReadOnlyAlbumView) exitSelection();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isReadOnlyAlbumView]);
 
   async function handleImport(files: FileList | File[]) {
     const result = await importFiles(files);
@@ -251,6 +284,7 @@ function PhotoLibrary({ user, onLogout }: { user: AuthUser; onLogout: () => void
         isAdmin={user.isAdmin}
         onLogout={handleLogout}
         onManageUsers={() => setShowUsersModal(true)}
+        onShareAlbum={setShareAlbumTarget}
       />
 
       <main className="main-column">
@@ -266,6 +300,7 @@ function PhotoLibrary({ user, onLogout }: { user: AuthUser; onLogout: () => void
           title={viewTitle(view, currentAlbum?.name)}
           selectionMode={selectionMode}
           onToggleSelectionMode={() => (selectionMode ? exitSelection() : setSelectionMode(true))}
+          selectionDisabled={isReadOnlyAlbumView}
         />
 
         {feedback && <div className="toast">{feedback}</div>}
@@ -301,9 +336,9 @@ function PhotoLibrary({ user, onLogout }: { user: AuthUser; onLogout: () => void
           />
         )}
 
-        {loading ? (
+        {loading || (view.type === "album" && albumViewLoading) ? (
           <div className="empty-state">
-            <p>Carregando biblioteca…</p>
+            <p>Carregando…</p>
           </div>
         ) : (
           <PhotoGrid
@@ -343,6 +378,7 @@ function PhotoLibrary({ user, onLogout }: { user: AuthUser; onLogout: () => void
           onOpenEditor={() => {
             setEditingPhotoId(selectedPhoto.id);
           }}
+          sharedByUsername={currentAlbum?.ownerUsername}
         />
       )}
 
@@ -366,6 +402,10 @@ function PhotoLibrary({ user, onLogout }: { user: AuthUser; onLogout: () => void
 
       {showUsersModal && (
         <UsersModal currentUserId={user.id} onClose={() => setShowUsersModal(false)} />
+      )}
+
+      {shareAlbumTarget && (
+        <ShareAlbumModal album={shareAlbumTarget} onClose={() => setShareAlbumTarget(null)} />
       )}
     </div>
   );

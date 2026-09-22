@@ -36,6 +36,12 @@ interface PhotoStoreState {
   addTagToPhotos: (photoIds: string[], tag: string) => Promise<void>;
   setFavoriteMany: (photoIds: string[]) => Promise<void>;
   removePhotosMany: (photoIds: string[]) => Promise<void>;
+  /**
+   * Busca as fotos de um álbum específico sob demanda, sem tocar no estado
+   * `photos` global — necessário para álbuns compartilhados, cujas fotos
+   * pertencem a outra conta e nunca entram na listagem geral do usuário.
+   */
+  fetchAlbumPhotos: (albumId: string) => Promise<PhotoRecord[]>;
 }
 
 export const usePhotoStore = create<PhotoStoreState>((set, get) => ({
@@ -126,5 +132,10 @@ export const usePhotoStore = create<PhotoStoreState>((set, get) => ({
   async removePhotosMany(photoIds) {
     const { photos } = await bulkPhotoAction(photoIds, { action: "delete" });
     set({ photos });
+  },
+
+  async fetchAlbumPhotos(albumId) {
+    const { photos } = await listPhotos({ albumId });
+    return photos;
   },
 }));
