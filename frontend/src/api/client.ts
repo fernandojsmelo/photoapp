@@ -1,8 +1,15 @@
 import type { AlbumRecord, PhotoEdits, PhotoRecord } from "../types/photo";
 
-export const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:4000";
+// Vazio = caminhos relativos à própria origem do frontend (ex.: "/api/...").
+// Em dev, o Vite proxya "/api" para o backend (ver vite.config.ts) — assim o
+// navegador só precisa alcançar a porta do Vite, mesmo em ambientes onde só
+// ela é encaminhada automaticamente. Em produção (imagem Docker), backend e
+// frontend já são servidos pela mesma origem, então também funciona sem
+// configurar nada. Só defina VITE_API_URL se o backend estiver de fato em
+// outra origem (porta/host diferente) e alcançável diretamente do navegador.
+export const API_BASE = import.meta.env.VITE_API_URL ?? "";
 
-class ApiError extends Error {
+export class ApiError extends Error {
   status: number;
   constructor(status: number, message: string) {
     super(message);
