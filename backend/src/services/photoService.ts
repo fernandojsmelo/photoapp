@@ -1,6 +1,6 @@
 import { v4 as uuid } from "uuid";
 import exifr from "exifr";
-import sharp from "sharp";
+import sharp, { type Sharp } from "sharp";
 import { db } from "../db/client.js";
 import { deletePhotoFiles, getOriginalPath, saveOriginal, saveThumbnail } from "../storage/fileStorage.js";
 import { sha256 } from "../utils/hash.js";
@@ -34,11 +34,43 @@ export interface PhotoListFilters {
   q?: string;
 }
 
+// Mesma tabela de ajustes por preset usada no frontend (utils/imageProcessing.ts,
+// PRESET_FILTERS), reimplementada com as operações equivalentes do sharp para
+// a miniatura do servidor ficar visualmente consistente com o preview do editor.
+const PRESET_ADJUST: Record<
+  PhotoEdits["preset"],
+  { saturation: number; contrast: number; brightness: number; hue: number; grayscale: boolean }
+> = {
+  none: { saturation: 1, contrast: 1, brightness: 1, hue: 0, grayscale: false },
+  vivid: { saturation: 1.5, contrast: 1.15, brightness: 1, hue: 0, grayscale: false },
+  mono: { saturation: 1, contrast: 1.05, brightness: 1, hue: 0, grayscale: true },
+  warm: { saturation: 1.2, contrast: 1, brightness: 1, hue: -8, grayscale: false },
+  cool: { saturation: 1.05, contrast: 1, brightness: 1.02, hue: 12, grayscale: false },
+  fade: { saturation: 0.75, contrast: 0.85, brightness: 1.08, hue: 0, grayscale: false },
+};
+
+/** Aplica brilho/contraste/saturação/exposição/preset no pipeline do sharp. */
+function applyColorAdjustments(pipeline: Sharp, edits: PhotoEdits): Sharp {
+  const preset = PRESET_ADJUST[edits.preset];
+  const brightness = Math.max(0, (1 + edits.brightness / 100 + edits.exposure / 150) * preset.brightness);
+  const contrast = (1 + edits.contrast / 100) * preset.contrast;
+  const saturation = Math.max(0, (1 + edits.saturation / 100) * preset.saturation);
+
+  let result = pipeline
+    .modulate({ brightness })
+    .linear(contrast, 128 * (1 - contrast))
+    .modulate({ saturation, hue: preset.hue });
+
+  if (preset.grayscale) {
+    result = result.grayscale();
+  }
+  return result;
+}
+
 /**
- * Gera o buffer da thumbnail já com a geometria do usuário aplicada
- * (auto-orientação EXIF + rotação manual + recorte), para que a miniatura
- * da grade reflita o crop sem o frontend precisar baixar o arquivo original.
- * Filtros de cor (brilho/contraste/preset) continuam só no frontend via CSS.
+ * Gera o buffer da thumbnail já com os ajustes do usuário aplicados
+ * (auto-orientação EXIF, rotação, recorte e cor), para que a miniatura da
+ * grade reflita a edição sem o frontend precisar baixar o arquivo original.
  */
 async function buildThumbnailBuffer(originalPath: string, edits: PhotoEdits): Promise<Buffer> {
   let rotatedBuffer = await sharp(originalPath).rotate().toBuffer();
@@ -58,7 +90,10 @@ async function buildThumbnailBuffer(originalPath: string, edits: PhotoEdits): Pr
     }
   }
 
-  return pipeline.resize(480, 480, { fit: "cover" }).jpeg({ quality: 78 }).toBuffer();
+  pipeline = pipeline.resize(480, 480, { fit: "cover" });
+  pipeline = applyColorAdjustments(pipeline, edits);
+
+  return pipeline.jpeg({ quality: 78 }).toBuffer();
 }
 
 function extFromMime(mimeType: string): string {
@@ -287,6 +322,18 @@ function cropEquals(a: PhotoEdits["crop"], b: PhotoEdits["crop"]): boolean {
   return a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height;
 }
 
+function editsEqual(a: PhotoEdits, b: PhotoEdits): boolean {
+  return (
+    a.brightness === b.brightness &&
+    a.contrast === b.contrast &&
+    a.saturation === b.saturation &&
+    a.exposure === b.exposure &&
+    a.rotation === b.rotation &&
+    a.preset === b.preset &&
+    cropEquals(a.crop, b.crop)
+  );
+}
+
 export async function updatePhoto(
   userId: string,
   photoId: string,
@@ -304,13 +351,12 @@ export async function updatePhoto(
       photoId,
     );
 
-    // A miniatura só precisa ser regenerada quando a geometria (crop/rotação)
-    // muda — ajustes de cor (brilho/contraste/preset) continuam aplicados só
-    // via CSS no frontend, sem custo de reprocessar a imagem no servidor.
+    // A miniatura é regenerada sempre que algo realmente muda — crop, rotação
+    // e agora também cor (brilho/contraste/saturação/exposição/preset), para
+    // a grade ficar fiel ao que foi salvo no editor sem custo desnecessário
+    // quando o PATCH não alterou nada (ex.: salvar sem mexer em nada).
     const previousEdits = JSON.parse(row.edits_json) as PhotoEdits;
-    const geometryChanged =
-      previousEdits.rotation !== patch.edits.rotation || !cropEquals(previousEdits.crop, patch.edits.crop);
-    if (geometryChanged) {
+    if (!editsEqual(previousEdits, patch.edits)) {
       try {
         const thumbnail = await buildThumbnailBuffer(
           getOriginalPath(photoId, row.original_ext),
